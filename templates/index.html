@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>マップ合成ツール</title>
+<style>
+  :root{
+    --ink:#ffffff;         /* アプリのベース：白 */
+    --panel:#ffffff;
+    --panel-2:#f4f6f8;
+    --line:#d9dfe4;
+    --text:#1c262d;
+    --muted:#6b7a86;
+    --accent:#2f9e73;      /* 地図の緑 */
+    --accent-dim:#3faa80;
+    --warn:#c07d1e;
+    --grid:#e8ecef;
+    --grid-2:#f5f7f8;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{
+    font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,system-ui,sans-serif;
+    background:var(--ink);color:var(--text);
+    display:flex;flex-direction:column;height:100vh;overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  header{
+    display:flex;align-items:baseline;gap:14px;
+    padding:10px 16px;border-bottom:1px solid var(--line);
+    background:#ffffff;
+  }
+  header h1{font-size:15px;font-weight:600;margin:0;letter-spacing:.02em}
+  header .hint{font-size:12px;color:var(--muted)}
+  .histbar{margin-left:auto;display:flex;gap:6px}
+  .histbar button{
+    padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--panel-2);
+    color:var(--text);font-size:12px;font-family:inherit;cursor:pointer;transition:border-color .12s,background .12s;
+  }
+  .histbar button:hover:not(:disabled){border-color:var(--accent);background:#eef6f2}
+  .histbar button:disabled{opacity:.4;cursor:not-allowed}
+  main{flex:1;display:flex;min-height:0}
+
+  /* ---- 左パネル ---- */
+  aside{
+    width:288px;flex-shrink:0;background:var(--panel);
+    border-right:1px solid var(--line);
+    overflow-y:auto;padding:14px;
+  }
+  .group{margin-bottom:18px}
+  .group > h2{
+    font-size:11px;color:var(--muted);font-weight:600;
+    margin:0 0 9px;letter-spacing:.08em;
+  }
+  .btn{
+    width:100%;display:flex;align-items:center;justify-content:center;gap:7px;
+    padding:9px 12px;border:1px solid var(--line);border-radius:7px;
+    background:var(--panel-2);color:var(--text);font-size:13px;font-family:inherit;
+    cursor:pointer;transition:border-color .12s,background .12s;
+  }
+  .btn:hover{border-color:var(--accent);background:#eef6f2}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#ffffff}
+  .btn.primary:hover{background:#278660}
+  .btn:disabled{opacity:.4;cursor:not-allowed}
+  .btn + .btn{margin-top:8px}
+  .btn-row{display:flex;gap:8px}
+  .btn-row .btn{margin-top:0}
+
+  .thumb{
+    margin-top:8px;height:74px;border:1px dashed var(--line);border-radius:6px;
+    background:
+      linear-gradient(45deg,#e4e9ed 25%,transparent 25%,transparent 75%,#e4e9ed 75%),
+      linear-gradient(45deg,#e4e9ed 25%,#f4f6f8 25%,#f4f6f8 75%,#e4e9ed 75%);
+    background-size:14px 14px;background-position:0 0,7px 7px;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;
+    color:var(--muted);font-size:11px;
+  }
+  .thumb img{max-width:100%;max-height:100%;display:block}
+  .thumb-sm{height:44px;font-size:10px}
+
+  .ctl{margin-bottom:13px}
+  .ctl label{display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:5px}
+  .ctl label b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}
+  /* 数値入力 + ステッパー */
+  .field{display:flex;align-items:center;gap:5px;margin-top:6px}
+  .field .lab{font-size:12px;color:var(--muted);width:20px;flex-shrink:0}
+  .field input[type=number]{
+    flex:1;min-width:0;width:100%;padding:6px 8px;font-size:13px;font-family:inherit;
+    text-align:right;color:var(--text);background:var(--panel-2);
+    border:1px solid var(--line);border-radius:6px;font-variant-numeric:tabular-nums;
+  }
+  .field input[type=number]:focus{outline:none;border-color:var(--accent)}
+  .field .unit{font-size:12px;color:var(--muted);width:16px;flex-shrink:0}
+  .stepper{display:flex;flex-shrink:0}
+  .stepper button{
+    width:26px;height:30px;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--text);font-size:15px;cursor:pointer;line-height:1;
+  }
+  .stepper button:hover{background:#e3e8ec;border-color:var(--accent)}
+  .stepper button:first-child{border-radius:6px 0 0 6px}
+  .stepper button:last-child{border-radius:0 6px 6px 0;border-left:none}
+  input[type=range]{
+    width:100%;height:4px;-webkit-appearance:none;appearance:none;
+    background:var(--line);border-radius:3px;outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:var(--accent);cursor:pointer;border:2px solid #ffffff;box-shadow:0 0 0 1px var(--line);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:var(--accent);
+    cursor:pointer;border:2px solid #ffffff;box-shadow:0 0 0 1px var(--line);
+  }
+  select{
+    width:100%;padding:8px 10px;background:var(--panel-2);color:var(--text);
+    border:1px solid var(--line);border-radius:7px;font-size:13px;font-family:inherit;cursor:pointer;
+  }
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+  .seg button{
+    flex:1;padding:8px;background:var(--panel-2);color:var(--muted);
+    border:none;border-left:1px solid var(--line);font-size:12px;font-family:inherit;cursor:pointer;
+  }
+  .seg button:first-child{border-left:none}
+  .seg button.on{background:var(--accent);color:#ffffff}
+  .seg button:disabled{opacity:.4;cursor:not-allowed}
+  .check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:8px}
+  .check input{width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+  .tip{font-size:11px;color:var(--muted);line-height:1.55;margin-top:6px}
+  kbd{background:var(--panel-2);border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px;font-family:inherit}
+
+  /* ---- キャンバス ---- */
+  .stage{flex:1;position:relative;min-width:0;background:#eef1f3;overflow:hidden}
+  #view{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab}
+  #view.dragging{cursor:grabbing}
+  #view.panning{cursor:move}
+  .stage-empty{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--muted);gap:6px;pointer-events:none;text-align:center;padding:20px;
+  }
+  .stage-empty .big{font-size:15px;color:#3a4954}
+  .zoombar{
+    position:absolute;left:12px;bottom:12px;display:flex;align-items:center;gap:6px;
+    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;padding:5px;
+    backdrop-filter:blur(6px);box-shadow:0 1px 4px rgba(0,0,0,.08);
+  }
+  .zoombar button{
+    width:28px;height:28px;border:none;border-radius:5px;background:var(--panel-2);color:var(--text);
+    font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  }
+  .zoombar button:hover{background:#e3e8ec}
+  .zoombar span{font-size:12px;color:var(--muted);min-width:44px;text-align:center;font-variant-numeric:tabular-nums}
+  .toast{
+    position:absolute;top:12px;left:50%;transform:translateX(-50%);
+    background:var(--accent);border:1px solid var(--accent);color:#ffffff;
+    box-shadow:0 2px 8px rgba(0,0,0,.12);
+    padding:8px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;
+  }
+  .toast.show{opacity:1}
+
+  .btn.small{padding:5px 8px;font-size:11px;width:auto;white-space:nowrap;margin-top:0}
+
+  /* ---- マップ設定ウィザード（起動時 & 「マップを変更」で全画面表示） ---- */
+  .setup-screen{
+    position:fixed;inset:0;z-index:80;background:var(--panel);
+    display:flex;justify-content:center;overflow-y:auto;padding:40px 24px;
+  }
+  .setup-screen[hidden]{display:none}
+  .setup-card{width:100%;max-width:900px;position:relative}
+  .setup-card h1{font-size:20px;margin:0 0 6px}
+  .setup-sub{font-size:13px;color:var(--muted);margin:0 0 22px}
+  .setup-close{
+    position:absolute;top:0;right:0;border:none;background:transparent;font-size:20px;
+    color:var(--muted);cursor:pointer;line-height:1;padding:4px 8px;border-radius:4px;
+  }
+  .setup-close:hover{background:var(--panel-2);color:var(--text)}
+
+  /* ステップ表示：クリックで行き来できる2ステップのプログレス */
+  .setup-stepper{display:flex;align-items:center;margin-bottom:22px}
+  .setup-step{
+    flex:1;display:flex;align-items:center;gap:10px;padding:10px 14px;
+    border:1.5px solid var(--line);border-radius:10px;background:var(--panel-2);
+    cursor:pointer;font-family:inherit;text-align:left;position:relative;
+    transition:border-color .12s,background .12s;
+  }
+  .setup-step:hover{border-color:var(--accent)}
+  .setup-step.on{border-color:var(--accent);background:#eef6f2;box-shadow:0 0 0 1px var(--accent)}
+  .setup-step-badge{
+    flex-shrink:0;width:24px;height:24px;border-radius:50%;background:var(--panel);
+    border:1.5px solid var(--line);color:var(--muted);font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .setup-step.on .setup-step-badge{background:var(--accent);border-color:var(--accent);color:#fff}
+  .setup-step-text{display:flex;flex-direction:column;gap:1px;min-width:0}
+  .setup-step-kind{font-size:13px;font-weight:700;color:var(--text)}
+  .setup-step-file{font-size:11px;color:var(--muted)}
+  .setup-step-check{
+    flex-shrink:0;margin-left:auto;width:20px;height:20px;border-radius:50%;
+    background:var(--accent);color:#fff;font-size:11px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .12s;
+  }
+  .setup-step-check.on{opacity:1}
+  .setup-step-line{width:28px;height:1.5px;background:var(--line);flex-shrink:0;margin:0 2px}
+
+  .setup-slot-row{
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+    margin-bottom:10px;
+  }
+  .setup-tabs{display:flex;gap:8px}
+  .setup-tab{
+    padding:7px 14px;border:1px solid var(--line);border-radius:20px;
+    background:var(--panel-2);color:var(--text);font-size:12px;font-family:inherit;
+    cursor:pointer;display:flex;align-items:center;gap:6px;
+    transition:border-color .12s,background .12s;
+  }
+  .setup-tab.on{border-color:var(--accent);background:var(--accent);color:#fff}
+  .setup-tab-state{font-size:11px;color:var(--muted)}
+  .setup-tab.on .setup-tab-state{color:rgba(255,255,255,.85)}
+  .setup-instruction{font-size:13px;color:var(--text)}
+  .setup-instruction b{color:var(--accent-dim)}
+  .setup-upload-row{
+    display:flex;align-items:center;justify-content:flex-end;gap:8px;
+    margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid var(--line);
+  }
+  .setup-status{padding:26px 10px;text-align:center;color:var(--muted);font-size:13px}
+
+  /* ①と同じ地図でmap.pngも使うかどうかの簡易確認（②で自動判定できるとき） */
+  .setup-auto-step{
+    padding:20px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);
+    margin-bottom:22px;text-align:center;
+  }
+  .setup-auto-question{font-size:14px;color:var(--text);margin:0 0 14px;line-height:1.6}
+  .setup-auto-step .btn-row{max-width:320px;margin:0 auto}
+  .setup-auto-decided{
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:13px;color:var(--accent-dim);font-weight:600;
+  }
+  .setup-auto-link{
+    border:none;background:transparent;color:var(--muted);font-size:12px;font-family:inherit;
+    text-decoration:underline;cursor:pointer;padding:4px;margin-top:10px;
+  }
+  .setup-auto-link:hover{color:var(--text)}
+  .setup-grid{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;
+    margin-bottom:16px;
+  }
+  .setup-card-item{
+    border:1px solid var(--line);border-radius:10px;background:var(--panel-2);
+    padding:10px;cursor:pointer;text-align:left;font-family:inherit;
+    display:flex;flex-direction:column;gap:7px;transition:border-color .12s,background .12s;
+    position:relative;
+  }
+  .setup-card-item:hover:not(:disabled){border-color:var(--accent);background:#eef6f2}
+  .setup-card-item.selected{border-color:var(--accent);background:#e3f3ea;box-shadow:0 0 0 1px var(--accent)}
+  .setup-card-item:disabled{opacity:.45;cursor:not-allowed}
+  .setup-card-thumb{
+    width:100%;height:110px;border-radius:6px;overflow:hidden;background:#fff;
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-size:11px;color:var(--muted);
+  }
+  .setup-card-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .setup-card-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .setup-card-meta{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .setup-card-check{
+    position:absolute;top:8px;right:8px;width:20px;height:20px;border-radius:50%;
+    background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;
+    font-size:12px;opacity:0;transition:opacity .12s;
+  }
+  .setup-card-item.selected .setup-card-check{opacity:1}
+  .setup-warning{
+    font-size:12px;color:var(--warn);background:#fbf1e3;border:1px solid #ecd6ac;
+    border-radius:8px;padding:9px 12px;margin-bottom:14px;
+  }
+  .setup-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+  .setup-footer .btn{width:auto;padding:10px 20px}
+  .setup-footer-nav{display:flex;gap:10px}
+
+  /* ---- サイドバー：読み込み済みマップの概要 ---- */
+  .map-sum{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+  .map-sum-thumb{
+    width:48px;height:48px;flex-shrink:0;border-radius:6px;overflow:hidden;border:1px dashed var(--line);
+    background:var(--panel-2);display:flex;align-items:center;justify-content:center;
+    font-size:9px;color:var(--muted);
+  }
+  .map-sum-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+  .map-sum-info{min-width:0}
+  .map-sum-title{font-size:10px;color:var(--muted);letter-spacing:.05em}
+  .map-sum-name{font-size:12px;color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px}
+
+  /* ---- 保存ダイアログ（新規／上書き選択） ---- */
+  .save-dialog-backdrop{
+    position:fixed;inset:0;z-index:90;background:rgba(20,26,30,.45);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .save-dialog-backdrop[hidden]{display:none}
+  .save-dialog{
+    width:420px;max-width:92vw;background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:18px;
+  }
+  .save-dialog h3{margin:0 0 4px;font-size:15px;font-weight:600}
+  .save-dialog .tip{margin:0 0 14px}
+  .save-dialog-field{margin-top:14px}
+  .save-dialog-field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px}
+  .save-dialog-field input[type=text]{
+    width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:7px;
+    font-size:13px;font-family:inherit;color:var(--text);background:var(--panel-2);
+  }
+  .save-dialog-field input[type=text]:focus{outline:none;border-color:var(--accent)}
+  .save-target{
+    font-size:12px;padding:10px 12px;border-radius:8px;background:var(--panel-2);
+    border:1px solid var(--line);margin-top:14px;line-height:1.5;
+  }
+  .save-error{font-size:12px;color:#c0392b;margin-top:12px}
+  .save-dialog-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+  .save-dialog-actions .btn{width:auto;padding:9px 18px}
+</style>
+</head>
+<body>
+<div class="setup-screen" id="setupScreen">
+  <div class="setup-card">
+    <button class="setup-close" id="setupClose" type="button" title="閉じる" hidden>×</button>
+    <h1>マップを選択</h1>
+    <p class="setup-sub">ベースマップと重ねるマップを選んでください。下の①②どちらか一方のペア（ベース＋重ねる）が揃えばOKです。</p>
+
+    <div class="setup-stepper" id="setupStepper">
+      <button class="setup-step on" data-step="1" type="button">
+        <span class="setup-step-badge">1</span>
+        <span class="setup-step-text">
+          <span class="setup-step-kind">位置補正用</span>
+          <span class="setup-step-file">static_map.png</span>
+        </span>
+        <span class="setup-step-check" id="setupStep1Check">✓</span>
+      </button>
+      <div class="setup-step-line"></div>
+      <button class="setup-step" data-step="2" type="button">
+        <span class="setup-step-badge">2</span>
+        <span class="setup-step-text">
+          <span class="setup-step-kind">進入禁止エリア用</span>
+          <span class="setup-step-file">map.png</span>
+        </span>
+        <span class="setup-step-check" id="setupStep2Check">✓</span>
+      </button>
+    </div>
+
+    <!-- ①で選んだのと同じ地図のmap.pngを自動で使えるとき（クラウドの地図から選んだ場合）に出す簡易確認 -->
+    <div class="setup-auto-step" id="setupAutoStep" style="display:none">
+      <p class="setup-auto-question" id="setupAutoQuestion">—</p>
+      <div class="btn-row">
+        <button class="btn primary" id="setupAutoYes" type="button">はい、使う</button>
+        <button class="btn" id="setupAutoNo" type="button">いいえ、使わない</button>
+      </div>
+      <div class="setup-auto-decided" id="setupAutoDecided" style="display:none">
+        <span id="setupAutoDecidedText">—</span>
+        <button class="setup-auto-link" id="setupAutoChange" type="button">変更する</button>
+      </div>
+      <button class="setup-auto-link" id="setupAutoManual" type="button">別の地図から選ぶ</button>
+    </div>
+
+    <div class="setup-slot-row" id="setupSlotRow">
+      <div class="setup-tabs" id="setupTabs">
+        <button class="setup-tab on" data-slot="base" type="button">
+          ベース<span class="setup-tab-state" id="setupBaseState">未選択</span>
+        </button>
+        <button class="setup-tab" data-slot="overlay" type="button">
+          重ねる<span class="setup-tab-state" id="setupOverlayState">未選択</span>
+        </button>
+      </div>
+      <div class="setup-instruction" id="setupToolbarLabel">ベースの<b>位置補正用</b>マップを選ぶ</div>
+    </div>
+
+    <div class="setup-upload-row" id="setupUploadRow">
+      <button class="setup-auto-link" id="setupBackToAuto" type="button" style="display:none;margin:0 auto 0 0">①と同じ地図を自動で使う</button>
+      <span class="tip" style="margin:0">地図一覧から選ぶか、ローカルファイルから：</span>
+      <button class="btn small" id="setupUploadCurrent" type="button">アップロード</button>
+    </div>
+
+    <div class="setup-status" id="setupStatus">読み込み中…</div>
+    <div class="setup-grid" id="setupGrid"></div>
+
+    <div class="setup-warning" id="setupWarning" hidden>位置補正用か進入禁止エリア用のどちらかは、ベース・重ねる両方を選んでください。</div>
+
+    <div class="setup-footer">
+      <button class="btn" id="setupSkip" type="button">このステップは使わない</button>
+      <button class="btn primary" id="setupFinish" type="button" disabled>エディタを開く</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <h1>マップ合成ツール</h1>
+  <span class="hint">2枚の地図を重ねて位置合わせ → 1枚に書き出し</span>
+  <div class="histbar">
+    <button id="undoBtn" title="元に戻す (Ctrl+Z)" disabled>↶ 元に戻す</button>
+    <button id="redoBtn" title="やり直す (Ctrl+Y)" disabled>↷ やり直す</button>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <div class="group">
+      <h2>1. マップ</h2>
+      <div class="map-sum" id="baseSummary">
+        <div class="map-sum-thumb" id="baseSummaryThumb">未読込</div>
+        <div class="map-sum-info">
+          <div class="map-sum-title">ベース</div>
+          <div class="map-sum-name" id="baseSummaryName">未読込</div>
+        </div>
+      </div>
+      <div class="map-sum" id="overlaySummary">
+        <div class="map-sum-thumb" id="overlaySummaryThumb">未読込</div>
+        <div class="map-sum-info">
+          <div class="map-sum-title">重ねる</div>
+          <div class="map-sum-name" id="overlaySummaryName">未読込</div>
+        </div>
+      </div>
+      <button class="btn" id="openMapSetup" style="margin-top:6px">マップを変更</button>
+      <div class="tip">位置・回転・トリミングは static_map.png（位置補正用） 上で編集します（無いときは map.png（進入禁止エリア用））。もう一方があれば同じ変形を適用して合成します。</div>
+    </div>
+
+    <div class="group">
+      <h2>2. 重ねるマップの調整</h2>
+      <div class="ctl">
+        <label>不透明度 <b id="opVal">70%</b></label>
+        <input type="range" id="opacity" min="0" max="100" value="70">
+      </div>
+      <div class="ctl">
+        <label>回転 <b id="rotVal">0°</b></label>
+        <input type="range" id="rot" min="-180" max="180" value="0">
+        <div class="field">
+          <span class="lab">°</span>
+          <input type="number" id="rotNum" min="-180" max="180" step="0.1" value="0">
+          <div class="stepper"><button data-step-rot="-0.1">−</button><button data-step-rot="0.1">＋</button></div>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>位置（px）</label>
+        <div class="field">
+          <span class="lab">X</span>
+          <input type="number" id="posX" step="0.5" value="0">
+          <div class="stepper"><button data-step-x="-0.5">−</button><button data-step-x="0.5">＋</button></div>
+        </div>
+        <div class="field">
+          <span class="lab">Y</span>
+          <input type="number" id="posY" step="0.5" value="0">
+          <div class="stepper"><button data-step-y="-0.5">−</button><button data-step-y="0.5">＋</button></div>
+        </div>
+      </div>
+      <div class="ctl">
+        <label>マウスのドラッグ操作</label>
+        <div class="seg" id="mouseModeSeg">
+          <button data-mm="move" class="on">移動</button>
+          <button data-mm="rotate">回転</button>
+        </div>
+        <div class="tip">「回転」にするとマップを左ドラッグで回せます。「移動」のままでも <kbd>Shift</kbd>+左ドラッグで回せます。</div>
+      </div>
+      <button class="btn" id="resetOverlay">位置と回転をリセット</button>
+      <label class="check"><input type="checkbox" id="showOverlay" checked> 重ねるマップを表示</label>
+    </div>
+
+    <div class="group">
+      <h2>3. 重ねるマップのトリミング</h2>
+      <button class="btn" id="cropToggle">トリミングを開始</button>
+      <div class="tip" id="cropHint">ボタンを押したあと、消したい／残したい範囲をマップ上でドラッグして囲みます。</div>
+      <div id="cropActions" style="display:none">
+        <div class="seg" id="cropShapeSeg" style="margin-top:8px">
+          <button data-shape="rect" class="on">四角</button>
+          <button data-shape="poly">多角形</button>
+        </div>
+        <div id="polyOps" style="display:none">
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn" id="polyUndo">1つ戻す</button>
+            <button class="btn" id="polyClose">図形を確定</button>
+          </div>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn" id="cropKeep" disabled>範囲だけ残す</button>
+          <button class="btn" id="cropCut" disabled>範囲を消す</button>
+        </div>
+        <button class="btn" id="cropReset" style="margin-top:8px">トリミングを取り消す</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>4. 保存</h2>
+      <button class="btn primary" id="exportBtn">合体して保存</button>
+      <div class="tip">static_map.png（位置補正用） / map.png（進入禁止エリア用） を同じ位置・回転・トリミングで合体し、クラウドの地図としてAPI経由で保存します（新規保存／上書き保存を選べます）。ベース側のEXIF情報はサーバー側で引き継ぎます。編集はどちらか一方でもできますが、<b>クラウド保存には両方が必要</b>です。出力サイズはベースの大きさに固定され、重ねるマップがはみ出た部分は切り捨てられます。</div>
+    </div>
+
+    <div class="group">
+      <h2>操作方法</h2>
+      <div class="tip">
+        ・重ねるマップを<b>ドラッグ</b>で移動<br>
+        ・<kbd>Space</kbd>+ドラッグ、または右／中ドラッグで<b>表示を移動</b><br>
+        ・<b>マウスホイール</b>で表示ズーム<br>
+        ・<kbd>矢印</kbd>で1px移動、<kbd>Shift</kbd>+で10px、<kbd>Alt</kbd>+で0.1px<br>
+        ・<kbd>[</kbd> <kbd>]</kbd>で回転±0.1°、<kbd>Shift</kbd>+で±1°<br>
+        ・<kbd>Ctrl</kbd>+<kbd>Z</kbd>で元に戻す、<kbd>Ctrl</kbd>+<kbd>Y</kbd>でやり直す
+      </div>
+    </div>
+  </aside>
+
+  <div class="stage">
+    <canvas id="view"></canvas>
+    <div class="stage-empty" id="empty">
+      <div class="big">まず地図を読み込みましょう</div>
+      <div>左の「マップを変更」からベースマップを読み込んでください</div>
+    </div>
+    <div class="zoombar">
+      <button id="zoomOut">−</button>
+      <span id="zoomVal">100%</span>
+      <button id="zoomIn">＋</button>
+      <button id="zoomFit" title="全体を表示" style="width:auto;padding:0 10px;font-size:12px">全体</button>
+    </div>
+    <div class="toast" id="toast"></div>
+  </div>
+</main>
+
+<input type="file" id="setupFileInput" accept="image/png,image/*" hidden>
+
+<div class="save-dialog-backdrop" id="saveDialogBackdrop" hidden>
+  <div class="save-dialog">
+    <h3>マップを保存</h3>
+    <p class="tip">クラウドの地図として保存します。</p>
+
+    <div class="seg" id="saveModeSeg">
+      <button data-mode="new" class="on" type="button">新規保存</button>
+      <button data-mode="overwrite" type="button">上書き保存</button>
+    </div>
+
+    <div class="save-dialog-field" id="saveNameField">
+      <label>マップ名</label>
+      <input type="text" id="saveMapName" placeholder="例: 工場A">
+    </div>
+
+    <div class="save-target" id="saveOverwriteTarget" style="display:none">—</div>
+    <div class="save-target" id="saveSingleNote" style="display:none">—</div>
+
+    <div class="save-error" id="saveError" hidden></div>
+
+    <div class="save-dialog-actions">
+      <button class="btn" id="saveDialogCancel" type="button">キャンセル</button>
+      <button class="btn primary" id="saveDialogConfirm" type="button">保存する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const canvas = $("view"), ctx = canvas.getContext("2d");
+
+// ---- 状態 ----
+// 「主」（base/overlay）がキャンバス上で編集する本体。map.png と static_map.png の
+// どちらか一方だけあれば良く、その場合はあるほうを主として編集対象にする。
+// static_map.png が主役なので、両方ある場合は static_map.png を主、map.png を
+// 「副」（baseSecondary/overlaySecondary）として同じ ov 変形・同じトリミングに追従させ、
+// 書き出し時に同じ位置関係で合体する（static_map.pngが無ければ map.png が主になる）。
+const state = {
+  base: null,            // 主 {img,w,h}
+  overlay: null,         // 主 {img,w,h,orig}
+  baseSecondary: null,    // 副 {img,w,h} ※主と反対の種類（両方あるときだけ使う）
+  overlaySecondary: null, // 副 {img,w,h,orig}
+  baseKind: "static",    // 主(state.base)の種類: "image"(map.png) or "static"(static_map.png)
+  overlayKind: "static", // 主(state.overlay)の種類: "image"(map.png) or "static"(static_map.png)
+  // map.png と static_map.png はステップが別なので、別々の地図から選ばれることもある。
+  // そのためEXIF取得用の map_id / 元ファイルは、主副どちらに回っても種類ごとに独立して持つ。
+  baseMapId: null,       // map.png側の map_id（クラウド由来。EXIF取得に使用）
+  baseMapFile: null,     // map.png側のローカル元ファイル（EXIF取得に使用）
+  baseStaticMapId: null, // static_map.png側の map_id（クラウド由来。EXIF取得に使用）
+  baseStaticFile: null,  // static_map.png側のローカル元ファイル（EXIF取得に使用）
+  baseName: null,       // サイドバー表示用の名前
+  overlayName: null,    // サイドバー表示用の名前
+  ov: { x:0, y:0, scale:1, rot:0, flipH:1, flipV:1, opacity:0.7, blend:"source-over", show:true },
+  view: { x:0, y:0, zoom:1 }, // ワールド→スクリーン
+};
+
+// ---- 座標変換 ----
+function worldToScreen(wx, wy){
+  return { x: wx*state.view.zoom + state.view.x, y: wy*state.view.zoom + state.view.y };
+}
+function screenToWorld(sx, sy){
+  return { x: (sx-state.view.x)/state.view.zoom, y: (sy-state.view.y)/state.view.zoom };
+}
+
+// ---- 描画 ----
+function resize(){
+  const r = canvas.parentElement.getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = r.width*dpr; canvas.height = r.height*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+function drawChecker(){
+  // 透明背景を示す市松（画面固定）
+  const w = canvas.clientWidth, h = canvas.clientHeight, s=12;
+  ctx.fillStyle = "#eef1f3"; ctx.fillRect(0,0,w,h);
+  ctx.fillStyle = "#e0e5e9";
+  for(let y=0;y<h;y+=s){
+    for(let x=((y/s)&1?s:0);x<w;x+=s*2){ ctx.fillRect(x,y,s,s); }
+  }
+}
+function applyOverlayTransform(){
+  const o = state.overlay, ov = state.ov, v = state.view;
+  // オーバーレイ中心をワールド原点(ov.x,ov.y=左上ワールド座標)に
+  const p = worldToScreen(ov.x, ov.y);
+  ctx.translate(p.x, p.y);
+  ctx.scale(v.zoom, v.zoom);
+  // 中心回転・反転
+  const cx = o.w*ov.scale/2, cy = o.h*ov.scale/2;
+  ctx.translate(cx, cy);
+  ctx.rotate(ov.rot*Math.PI/180);
+  ctx.scale(ov.flipH, ov.flipV);
+  ctx.translate(-cx, -cy);
+  ctx.scale(ov.scale, ov.scale);
+}
+function draw(){
+  drawChecker();
+  // ベース
+  if(state.base){
+    const p = worldToScreen(0,0);
+    ctx.save();
+    ctx.imageSmoothingEnabled = state.view.zoom < 2;
+    ctx.drawImage(state.base.img, p.x, p.y, state.base.w*state.view.zoom, state.base.h*state.view.zoom);
+    ctx.restore();
+  }
+  // オーバーレイ
+  if(state.overlay && state.ov.show){
+    ctx.save();
+    ctx.globalAlpha = state.ov.opacity;
+    ctx.globalCompositeOperation = state.ov.blend;
+    ctx.imageSmoothingEnabled = state.view.zoom*state.ov.scale < 2;
+    applyOverlayTransform();
+    ctx.drawImage(state.overlay.img, 0, 0);
+    ctx.restore();
+    // 枠線（選択中の目印）
+    ctx.save();
+    ctx.globalCompositeOperation = "source-over";
+    applyOverlayTransform();
+    ctx.strokeStyle = "rgba(79,178,134,.9)";
+    ctx.lineWidth = 1.5/(state.view.zoom*state.ov.scale);
+    ctx.strokeRect(0,0,state.overlay.w,state.overlay.h);
+    ctx.restore();
+    // トリミング選択範囲のプレビュー（画面の向きで軸平行）
+    if(cropMode && cropRect && cropRect.w>0 && cropRect.h>0){
+      const a=worldToScreen(cropRect.x,cropRect.y);
+      const b=worldToScreen(cropRect.x+cropRect.w, cropRect.y+cropRect.h);
+      const rx=a.x, ry=a.y, rw=b.x-a.x, rh=b.y-a.y;
+      ctx.save();
+      ctx.globalCompositeOperation="source-over";
+      ctx.fillStyle="rgba(224,164,88,.14)";
+      ctx.fillRect(rx,ry,rw,rh);
+      ctx.strokeStyle="#e0a458"; ctx.lineWidth=1.5;
+      ctx.setLineDash([6,4]);
+      ctx.strokeRect(rx,ry,rw,rh);
+      ctx.restore();
+    }
+    // 多角形のプレビュー（画面座標）
+    if(cropMode && cropShape==="poly" && cropPoints.length){
+      ctx.save();
+      ctx.globalCompositeOperation="source-over";
+      const pts=cropPoints.map(p=>worldToScreen(p.x,p.y));
+      ctx.beginPath();
+      pts.forEach((p,i)=> i? ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));
+      if(cropClosed) ctx.closePath();
+      else if(hoverWorld){ const h=worldToScreen(hoverWorld.x,hoverWorld.y); ctx.lineTo(h.x,h.y); }
+      if(cropClosed){ ctx.fillStyle="rgba(224,164,88,.14)"; ctx.fill(); }
+      ctx.strokeStyle="#e0a458"; ctx.lineWidth=1.5; ctx.setLineDash(cropClosed?[]:[6,4]);
+      ctx.stroke();
+      // 頂点
+      ctx.setLineDash([]);
+      pts.forEach((p,i)=>{
+        ctx.beginPath(); ctx.arc(p.x,p.y, i===0?5:3.5, 0, Math.PI*2);
+        ctx.fillStyle = i===0 ? "#e0a458" : "#fff";
+        ctx.strokeStyle="#e0a458"; ctx.lineWidth=1.5; ctx.fill(); ctx.stroke();
+      });
+      ctx.restore();
+    }
+  }
+}
+
+// ---- 画像読み込み ----
+// Blob/File を {img,w,h} にデコードするだけ（stateへの反映はしない）。
+// マップ設定ウィザードで選んだものを一旦これで確認用に保持し、
+// 「エディタを開く」時にまとめて commitPrimary/commitSecondary で state に反映する。
+function decodeImageBlob(blob){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = ()=>{ URL.revokeObjectURL(url); resolve({ img, w: img.naturalWidth, h: img.naturalHeight }); };
+    img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("画像を読み込めませんでした")); };
+    img.src = url;
+  });
+}
+// 編集対象（主）として state.base / state.overlay に反映する
+// kind に応じて、EXIF取得用のmap_id/元ファイルは対応する種類別フィールドに保存する
+// （baseMapId/baseMapFile = map.png側、baseStaticMapId/baseStaticFile = static_map.png側）。
+// 主・副どちらに回るかに関係なく、種類（kind）で場所が決まる。
+function commitPrimary(slot, rec, kind, mapId, mapFile, name){
+  const target = { img: rec.img, w: rec.w, h: rec.h };
+  if(slot === "base"){
+    state.base = target;
+    state.baseKind = kind;
+    state.baseName = name;
+    if(kind === "static"){ state.baseStaticMapId = mapId; state.baseStaticFile = mapFile; }
+    else{ state.baseMapId = mapId; state.baseMapFile = mapFile; }
+    if(!state.overlay) zoomFit();
+  }else{
+    target.orig = rec.img; // トリミング取り消し用に原本を保持
+    state.overlay = target;
+    state.overlayKind = kind;
+    state.overlayName = name;
+    state.ov.x = 0; state.ov.y = 0; state.ov.scale = 1; state.ov.rot = 0;
+    state.ov.flipH = 1; state.ov.flipV = 1;
+    exitCropMode();
+    if(state.base){ state.ov.x = state.base.w*0.35; } // ベースがあれば少し右にずらして重なりを見やすく
+    syncControls();
+    initHistory();
+  }
+  $("empty").style.display = state.base ? "none" : "flex";
+}
+// 追従（副）として state.baseSecondary / state.overlaySecondary に反映する（主と反対の種類）
+function commitSecondary(slot, rec, kind, mapId, file){
+  const target = { img: rec.img, w: rec.w, h: rec.h };
+  if(slot === "base"){
+    state.baseSecondary = target;
+    if(kind === "static"){ state.baseStaticMapId = mapId; state.baseStaticFile = file; }
+    else{ state.baseMapId = mapId; state.baseMapFile = file; }
+  }else{
+    target.orig = rec.img;
+    state.overlaySecondary = target;
+  }
+}
+function cloneThumb(img){ const c=img.cloneNode(); c.style.maxWidth="100%";c.style.maxHeight="100%"; return c; }
+
+// ---- サイドバー：読み込み済みマップの概要 ----
+function updateMapSummary(){ renderSummarySlot("base"); renderSummarySlot("overlay"); }
+function renderSummarySlot(slot){
+  const primary = slot==="base" ? state.base : state.overlay;
+  const secondary = slot==="base" ? state.baseSecondary : state.overlaySecondary; // 主と反対の種類
+  const kind = slot==="base" ? state.baseKind : state.overlayKind;
+  const name = slot==="base" ? state.baseName : state.overlayName;
+  const thumbEl = $(slot+"SummaryThumb");
+  const nameEl = $(slot+"SummaryName");
+  const src = primary ? primary.img : (secondary ? secondary.img : null);
+  thumbEl.innerHTML = "";
+  if(src instanceof HTMLCanvasElement){
+    const t = new Image();
+    t.onload = ()=>{ thumbEl.innerHTML=""; thumbEl.appendChild(cloneThumb(t)); };
+    t.src = src.toDataURL();
+  }else if(src){
+    thumbEl.appendChild(cloneThumb(src));
+  }else{
+    thumbEl.textContent = "未読込";
+  }
+  if(!primary && !secondary){
+    nameEl.textContent = "未読込";
+  }else{
+    const parts = [];
+    if(primary) parts.push(kindShortLabel(kind));
+    if(secondary) parts.push(kindShortLabel(kind==="static" ? "image" : "static"));
+    nameEl.textContent = (name ? name+" ・ " : "") + parts.join("+");
+  }
+}
+
+// ---- マップ設定ウィザード（起動時、および「マップを変更」から全画面表示） ----
+// ステップ1: static_map.png のベース／重ねるを選ぶ（無ければ「合成しない」でスキップ）
+// ステップ2: map.png のベース／重ねるを選ぶ（無ければ「合成しない」でスキップ）
+// static_map.png・map.png のどちらか一方でも「ベース＋重ねる」が揃っていればエディタを開ける。
+let setupStep = 1;            // 1 = static_map.png, 2 = map.png
+let setupActiveSlot = "base"; // "base" | "overlay"
+let setupMaps = [];
+// ウィザードの作業領域。「エディタを開く」を押すまで state には反映しない。
+const picks = {
+  static: { base: null, overlay: null }, // {img,w,h,mapId,name,file}
+  image:  { base: null, overlay: null },
+};
+// ステップ2（map.png）で、ステップ1と同じ地図から自動取得できる／使わないを選んだかどうか
+let step2ManualOverride = false; // 「別の地図から選ぶ」で通常の一覧選択に切り替えたか
+let step2Declined = false;       // 「いいえ、使わない」を選んだか
+
+function currentStepKind(){ return setupStep === 1 ? "static" : "image"; }
+// ステップ1のベース・重ねるが両方ともクラウドの地図（map_idあり）で揃っているとき、
+// 同じ地図のmap.pngを自動取得できる
+function canAutoDeriveImage(){
+  return !!(picks.static.base && picks.static.base.mapId && picks.static.overlay && picks.static.overlay.mapId);
+}
+// static_map.png / map.png はファイル名だけだと分かりにくいので、用途名を添えて表示する
+function kindLabel(kind){ return kind === "static" ? "static_map.png（位置補正用）" : "map.png（進入禁止エリア用）"; }
+function kindShortLabel(kind){ return kind === "static" ? "位置補正用" : "進入禁止エリア用"; }
+function kindFilename(kind){ return kind === "static" ? "static_map.png" : "map.png"; }
+function slotLabel(slot){ return slot === "base" ? "ベース" : "重ねる"; }
+// "1733804043" のようなUnix秒文字列を "2024/12/10 12:34" のような表記に整形する
+function formatUpdatedAt(v){
+  if(!v) return null;
+  const n = Number(v);
+  if(!Number.isFinite(n)) return String(v);
+  const d = new Date(n * 1000);
+  if(isNaN(d.getTime())) return String(v);
+  const pad = x => String(x).padStart(2, "0");
+  return `${d.getFullYear()}/${pad(d.getMonth()+1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function openMapSetup(){
+  $("setupScreen").hidden = false;
+  // すでに編集中のマップがあるとき（「マップを変更」からの再オープン）だけ閉じるボタンを出す
+  $("setupClose").hidden = !(state.base && state.overlay);
+  goToStep(1);
+  if(setupMaps.length) renderSetupGrid();
+  else fetchSetupMaps();
+}
+$("openMapSetup").addEventListener("click", openMapSetup);
+$("setupClose").addEventListener("click", ()=>{ $("setupScreen").hidden = true; });
+
+document.querySelectorAll(".setup-tab").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    setupActiveSlot = b.dataset.slot;
+    updateStepUI();
+  });
+});
+// ステップのカードそのものをクリックして①⇔②を自由に行き来できるようにする
+document.querySelectorAll(".setup-step").forEach(b=>{
+  b.addEventListener("click", ()=> goToStep(Number(b.dataset.step)));
+});
+
+function goToStep(n){
+  setupStep = n;
+  setupActiveSlot = "base";
+  updateStepUI();
+}
+function updateStepUI(){
+  const kind = currentStepKind();
+  const staticOK = !!(picks.static.base && picks.static.overlay);
+  const mapOK = !!(picks.image.base && picks.image.overlay);
+
+  document.querySelectorAll(".setup-step").forEach(el=>{
+    el.classList.toggle("on", Number(el.dataset.step) === setupStep);
+  });
+  $("setupStep1Check").classList.toggle("on", staticOK);
+  $("setupStep2Check").classList.toggle("on", mapOK);
+
+  // ステップ1と同じ地図（map_idあり）が揃っているときは、ステップ2は「使うか使わないか」だけの
+  // 簡易確認にし、わざわざ地図一覧から選び直させない。
+  const autoMode = setupStep === 2 && canAutoDeriveImage() && !step2ManualOverride;
+  $("setupAutoStep").style.display = autoMode ? "block" : "none";
+  $("setupSlotRow").style.display = autoMode ? "none" : "flex";
+  $("setupUploadRow").style.display = autoMode ? "none" : "flex";
+  $("setupGrid").style.display = autoMode ? "none" : "grid";
+  $("setupStatus").style.display = autoMode ? "none" : "";
+  $("setupBackToAuto").style.display = (!autoMode && setupStep === 2 && canAutoDeriveImage()) ? "inline" : "none";
+
+  if(autoMode){
+    const decided = mapOK || step2Declined;
+    const btnRow = document.querySelector("#setupAutoStep .btn-row");
+    if(decided){
+      $("setupAutoQuestion").style.display = "none";
+      btnRow.style.display = "none";
+      $("setupAutoDecided").style.display = "flex";
+      $("setupAutoDecidedText").textContent = mapOK
+        ? "✓ map.png（進入禁止エリア用）も使用します"
+        : "map.png（進入禁止エリア用）は使用しません";
+    }else{
+      $("setupAutoQuestion").style.display = "block";
+      $("setupAutoQuestion").textContent =
+        `ベース「${picks.static.base.name || ""}」・重ねる「${picks.static.overlay.name || ""}」の ` +
+        `map.png（進入禁止エリア用）も使いますか？`;
+      btnRow.style.display = "flex";
+      $("setupAutoDecided").style.display = "none";
+    }
+  }else{
+    renderSetupGrid();
+  }
+
+  document.querySelectorAll(".setup-tab").forEach(b=>{
+    const slot = b.dataset.slot;
+    b.classList.toggle("on", slot === setupActiveSlot);
+    $(slot === "base" ? "setupBaseState" : "setupOverlayState").textContent = picks[kind][slot] ? "選択済み" : "未選択";
+  });
+  $("setupToolbarLabel").innerHTML = `${slotLabel(setupActiveSlot)}の<b>${kindShortLabel(kind)}</b>マップを選ぶ`;
+  $("setupUploadCurrent").textContent = "アップロード";
+  $("setupSkip").textContent = `このステップ（${kindShortLabel(kind)}）は使わない`;
+  // 自動確認UI側に同等の「いいえ」があるので、二重表示を避けるため footer 側は隠す
+  $("setupSkip").style.display = autoMode ? "none" : "";
+
+  $("setupFinish").disabled = !(staticOK || mapOK);
+  $("setupWarning").hidden = staticOK || mapOK;
+}
+
+async function fetchSetupMaps(){
+  const statusEl = $("setupStatus"), gridEl = $("setupGrid");
+  statusEl.style.display = "block"; statusEl.textContent = "読み込み中…";
+  gridEl.innerHTML = "";
+  try{
+    const res = await fetch("/api/maps");
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || data.error){
+      throw new Error((data && data.error) || `HTTP ${res.status}`);
+    }
+    setupMaps = data.maps || [];
+    if(!setupMaps.length){
+      statusEl.textContent = "地図が見つかりませんでした。ローカルファイルから読み込んでください。";
+      return;
+    }
+    statusEl.style.display = "none";
+    renderSetupGrid();
+  }catch(err){
+    statusEl.textContent = "地図一覧の取得に失敗しました: " + err.message;
+  }
+}
+function renderSetupGrid(){
+  const gridEl = $("setupGrid");
+  gridEl.innerHTML = "";
+  setupMaps.forEach(m => gridEl.appendChild(buildSetupCard(m)));
+}
+// カードはステップで決まっている種類（static_map.png / map.png）専用。
+// その種類の画像が無い地図はグレーアウトして選べない。
+function buildSetupCard(m){
+  const kind = currentStepKind();
+  const has = kind === "static" ? !!m.static_image : !!m.image;
+  const pick = picks[kind][setupActiveSlot];
+  const isSelected = !!(pick && pick.mapId != null && String(pick.mapId) === String(m.map_id));
+
+  const card = document.createElement("button");
+  card.type = "button";
+  card.className = "setup-card-item" + (isSelected ? " selected" : "");
+
+  const thumb = document.createElement("div"); thumb.className = "setup-card-thumb";
+  if(has){
+    const thumbImg = document.createElement("img");
+    thumbImg.loading = "lazy";
+    thumbImg.src = `/api/maps/${encodeURIComponent(m.map_id)}/image?kind=${kind}`;
+    thumbImg.onerror = ()=>{ thumbImg.remove(); thumb.textContent = "画像なし"; };
+    thumb.appendChild(thumbImg);
+  }else{
+    thumb.textContent = `${kindLabel(kind)}なし`;
+  }
+
+  const name = document.createElement("div"); name.className = "setup-card-name";
+  name.textContent = m.name || `(ID: ${m.map_id})`;
+  const meta = document.createElement("div"); meta.className = "setup-card-meta";
+  const updatedLabel = formatUpdatedAt(m.updated_at);
+  meta.textContent = updatedLabel ? `更新: ${updatedLabel}` : `ID: ${m.map_id}`;
+
+  const check = document.createElement("div"); check.className = "setup-card-check"; check.textContent = "✓";
+
+  card.appendChild(thumb); card.appendChild(name); card.appendChild(meta); card.appendChild(check);
+  if(has){
+    card.addEventListener("click", ()=> pickForStep(m));
+  }else{
+    card.disabled = true;
+    card.title = `この地図には${kindLabel(kind)}がありません`;
+  }
+  return card;
+}
+async function fetchImageBlob(url){
+  const res = await fetch(url);
+  if(!res.ok){
+    const err = await res.json().catch(()=>null);
+    throw new Error((err && err.error) || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+// 現在のステップ（static_map.png / map.png）の、現在のスロット（ベース/重ねる）用として選ぶ
+// ステップ1（static_map.png）の選択が変わったら、ステップ2の自動取得結果・回答は古くなるのでやり直す
+function resetStep2AutoIfStaticChanged(kind){
+  if(kind !== "static") return;
+  picks.image.base = null;
+  picks.image.overlay = null;
+  step2Declined = false;
+  step2ManualOverride = false;
+}
+
+async function pickForStep(m){
+  const kind = currentStepKind();
+  const slot = setupActiveSlot;
+  toast("読み込み中…");
+  try{
+    const blob = await fetchImageBlob(`/api/maps/${encodeURIComponent(m.map_id)}/image?kind=${kind}`);
+    const rec = await decodeImageBlob(blob);
+    rec.mapId = m.map_id;
+    rec.name = m.name || `ID:${m.map_id}`;
+    rec.file = null;
+    picks[kind][slot] = rec;
+    resetStep2AutoIfStaticChanged(kind);
+    if(slot === "base") setupActiveSlot = "overlay"; // ベースを選んだら自動で重ねるの選択に進む
+    updateStepUI();
+  }catch(err){
+    toast("地図の読み込みに失敗しました: " + err.message);
+  }
+}
+
+$("setupUploadCurrent").addEventListener("click", ()=> $("setupFileInput").click());
+$("setupFileInput").addEventListener("change", async e=>{
+  const f = e.target.files[0]; e.target.value = "";
+  if(!f) return;
+  const kind = currentStepKind();
+  const slot = setupActiveSlot;
+  try{
+    const rec = await decodeImageBlob(f);
+    rec.mapId = null;
+    rec.name = f.name;
+    rec.file = f;
+    picks[kind][slot] = rec;
+    resetStep2AutoIfStaticChanged(kind);
+    if(slot === "base") setupActiveSlot = "overlay"; // ベースを選んだら自動で重ねるの選択に進む
+    updateStepUI();
+  }catch(err){
+    toast("画像を読み込めませんでした");
+  }
+});
+
+// ステップ2の自動確認UI：①と同じ地図のmap.pngを使うか使わないか
+$("setupAutoYes").addEventListener("click", async ()=>{
+  toast("map.png を読み込み中…");
+  try{
+    for(const slot of ["base", "overlay"]){
+      const src = picks.static[slot];
+      const blob = await fetchImageBlob(`/api/maps/${encodeURIComponent(src.mapId)}/image?kind=image`);
+      const rec = await decodeImageBlob(blob);
+      rec.mapId = src.mapId;
+      rec.name = src.name;
+      rec.file = null;
+      picks.image[slot] = rec;
+    }
+    step2Declined = false;
+    updateStepUI();
+  }catch(err){
+    toast("map.png の読み込みに失敗しました: " + err.message);
+  }
+});
+$("setupAutoNo").addEventListener("click", ()=>{
+  picks.image.base = null;
+  picks.image.overlay = null;
+  step2Declined = true;
+  updateStepUI();
+});
+$("setupAutoChange").addEventListener("click", ()=>{
+  picks.image.base = null;
+  picks.image.overlay = null;
+  step2Declined = false;
+  updateStepUI();
+});
+$("setupAutoManual").addEventListener("click", ()=>{
+  step2ManualOverride = true;
+  updateStepUI();
+});
+$("setupBackToAuto").addEventListener("click", ()=>{
+  step2ManualOverride = false;
+  updateStepUI();
+});
+
+// このステップは使わない（ベース・重ねるの選択をクリアする。ステップ1ならそのまま②へ進む）
+$("setupSkip").addEventListener("click", ()=>{
+  const kind = currentStepKind();
+  picks[kind].base = null;
+  picks[kind].overlay = null;
+  if(setupStep === 1) goToStep(2);
+  else updateStepUI();
+});
+
+$("setupFinish").addEventListener("click", ()=>{
+  const staticOK = picks.static.base && picks.static.overlay;
+  const mapOK = picks.image.base && picks.image.overlay;
+  if(!staticOK && !mapOK){
+    toast("位置補正用か進入禁止エリア用のどちらかは、ベース・重ねる両方を選んでください");
+    return;
+  }
+  finalizeSetup();
+  $("setupScreen").hidden = true;
+});
+
+// picks の内容をまとめて state に反映する。static_map.png が主役なので、揃っていれば
+// それを編集対象（主）にし、map.png も揃っていれば副として追従させる。
+// static_map.pngが無ければ map.png を主にする（そのときは副は無し）。
+function finalizeSetup(){
+  const staticOK = picks.static.base && picks.static.overlay;
+  const mapOK = picks.image.base && picks.image.overlay;
+
+  state.baseSecondary = null; state.overlaySecondary = null;
+  state.baseMapId = null; state.baseMapFile = null;
+  state.baseStaticMapId = null; state.baseStaticFile = null;
+
+  if(staticOK){
+    commitPrimary("base", picks.static.base, "static", picks.static.base.mapId, picks.static.base.file, picks.static.base.name);
+    commitPrimary("overlay", picks.static.overlay, "static", null, null, picks.static.overlay.name);
+    if(mapOK){
+      commitSecondary("base", picks.image.base, "image", picks.image.base.mapId, picks.image.base.file);
+      commitSecondary("overlay", picks.image.overlay, "image", null, null);
+    }
+  }else{ // mapOK
+    commitPrimary("base", picks.image.base, "image", picks.image.base.mapId, picks.image.base.file, picks.image.base.name);
+    commitPrimary("overlay", picks.image.overlay, "image", null, null, picks.image.overlay.name);
+  }
+
+  updateExportEnabled();
+  updateMapSummary();
+  if(state.base && state.overlay) zoomFit();
+  draw();
+}
+
+// 起動時はマップ設定ウィザードだけを表示する
+openMapSetup();
+
+// ---- ズーム／フィット ----
+function zoomFit(){
+  if(!state.base && !state.overlay) return;
+  const b = boundingWorld();
+  const r = canvas.parentElement.getBoundingClientRect();
+  const pad = 40;
+  const zx = (r.width-pad*2)/b.w, zy=(r.height-pad*2)/b.h;
+  state.view.zoom = Math.min(zx, zy, 4);
+  state.view.x = (r.width - b.w*state.view.zoom)/2 - b.x*state.view.zoom;
+  state.view.y = (r.height - b.h*state.view.zoom)/2 - b.y*state.view.zoom;
+  updateZoomLabel(); draw();
+}
+function boundingWorld(){
+  // ワールド空間での全体バウンディング（ベース + 変形後オーバーレイ）
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  const add=(x,y)=>{minX=Math.min(minX,x);minY=Math.min(minY,y);maxX=Math.max(maxX,x);maxY=Math.max(maxY,y)};
+  if(state.base){ add(0,0); add(state.base.w,state.base.h); }
+  if(state.overlay){ overlayCorners().forEach(p=>add(p.x,p.y)); }
+  if(minX===Infinity){ return {x:0,y:0,w:100,h:100}; }
+  return { x:minX, y:minY, w:maxX-minX, h:maxY-minY, minX,minY,maxX,maxY };
+}
+function overlayCorners(){
+  // 変形後オーバーレイ四隅のワールド座標
+  const o=state.overlay, ov=state.ov;
+  const w=o.w*ov.scale, h=o.h*ov.scale;
+  const cx=w/2, cy=h/2, a=ov.rot*Math.PI/180;
+  const pts=[[0,0],[w,0],[w,h],[0,h]].map(([px,py])=>{
+    let x=px, y=py;
+    // 反転
+    x = cx + (x-cx)*ov.flipH; y = cy + (y-cy)*ov.flipV;
+    // 回転
+    const dx=x-cx, dy=y-cy;
+    return { x: ov.x + cx + dx*Math.cos(a)-dy*Math.sin(a),
+             y: ov.y + cy + dx*Math.sin(a)+dy*Math.cos(a) };
+  });
+  return pts;
+}
+function setZoom(z, cx, cy){
+  const r = canvas.parentElement.getBoundingClientRect();
+  cx = cx ?? r.width/2; cy = cy ?? r.height/2;
+  const w = screenToWorld(cx, cy);
+  state.view.zoom = Math.max(0.03, Math.min(20, z));
+  state.view.x = cx - w.x*state.view.zoom;
+  state.view.y = cy - w.y*state.view.zoom;
+  updateZoomLabel(); draw();
+}
+function updateZoomLabel(){ $("zoomVal").textContent = Math.round(state.view.zoom*100)+"%"; }
+
+// ---- ヒットテスト（オーバーレイ内か） ----
+function hitOverlay(sx, sy){
+  if(!state.overlay || !state.ov.show) return false;
+  const w = screenToWorld(sx, sy);
+  // ワールド点をオーバーレイローカルへ逆変換
+  const o=state.overlay, ov=state.ov;
+  const sw=o.w*ov.scale, sh=o.h*ov.scale, cx=sw/2, cy=sh/2, a=-ov.rot*Math.PI/180;
+  let x=w.x-ov.x-cx, y=w.y-ov.y-cy;
+  let rx=x*Math.cos(a)-y*Math.sin(a), ry=x*Math.sin(a)+y*Math.cos(a);
+  rx=rx*ov.flipH; ry=ry*ov.flipV;
+  rx+=cx; ry+=cy;
+  return rx>=0 && ry>=0 && rx<=sw && ry<=sh;
+}
+// スクリーン/ワールド座標 → オーバーレイ画像ローカル座標（px, 回転前）
+function worldToOverlayLocal(wx, wy){
+  const o=state.overlay, ov=state.ov;
+  const sw=o.w*ov.scale, sh=o.h*ov.scale, cx=sw/2, cy=sh/2, a=-ov.rot*Math.PI/180;
+  let x=wx-ov.x-cx, y=wy-ov.y-cy;
+  let rx=x*Math.cos(a)-y*Math.sin(a), ry=x*Math.sin(a)+y*Math.cos(a);
+  rx=(rx*ov.flipH)+cx; ry=(ry*ov.flipV)+cy;
+  return { x: rx/ov.scale, y: ry/ov.scale };
+}
+function screenToOverlayLocal(sx, sy){
+  const w = screenToWorld(sx, sy);
+  return worldToOverlayLocal(w.x, w.y);
+}
+// オーバーレイ中心のスクリーン座標
+function overlayCenterScreen(){
+  const o=state.overlay, ov=state.ov;
+  return worldToScreen(ov.x + o.w*ov.scale/2, ov.y + o.h*ov.scale/2);
+}
+
+// ---- トリミング状態 ----
+let cropMode=false, cropShape="rect", cropRect=null;
+let cropPoints=[], cropClosed=false, hoverWorld=null; // 多角形（ワールド頂点）
+
+// ---- マウス操作 ----
+let drag=null, spaceDown=false, mouseMode="move";
+canvas.addEventListener("mousedown", e=>{
+  const rect=canvas.getBoundingClientRect();
+  const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+  const wantPan = spaceDown || e.button===1 || e.button===2;
+  if(cropMode && cropShape==="rect" && !wantPan && state.overlay){
+    drag={mode:"crop", start:screenToWorld(sx,sy)};
+    cropRect=null; setCropButtons(false);
+    canvas.classList.add("dragging");
+  }else if(cropMode && cropShape==="poly" && !wantPan && state.overlay){
+    drag={mode:"polyclick", sx, sy}; // クリック判定はmouseupで
+  }else if(!wantPan && hitOverlay(sx,sy)){
+    const rotate = (mouseMode==="rotate" || e.shiftKey);
+    if(rotate){
+      const c=overlayCenterScreen();
+      drag={mode:"rotate", cx:c.x, cy:c.y, a0:Math.atan2(sy-c.y, sx-c.x), rot0:state.ov.rot};
+    }else{
+      drag={mode:"move", sx,sy, ox:state.ov.x, oy:state.ov.y};
+    }
+    canvas.classList.add("dragging");
+  }else{
+    drag={mode:"pan", sx,sy, vx:state.view.x, vy:state.view.y};
+    canvas.classList.add("panning");
+  }
+});
+window.addEventListener("mousemove", e=>{
+  const rect=canvas.getBoundingClientRect();
+  const sx=e.clientX-rect.left, sy=e.clientY-rect.top;
+  if(!drag){
+    // 多角形の作成中は次の頂点までラバーバンド表示
+    if(cropMode && cropShape==="poly" && cropPoints.length && !cropClosed){
+      hoverWorld=screenToWorld(sx,sy); draw();
+    }
+    return;
+  }
+  if(drag.mode==="crop"){
+    const p=screenToWorld(sx,sy);
+    const x0=Math.min(drag.start.x,p.x), y0=Math.min(drag.start.y,p.y);
+    const x1=Math.max(drag.start.x,p.x), y1=Math.max(drag.start.y,p.y);
+    cropRect={x:x0,y:y0,w:x1-x0,h:y1-y0}; draw();
+  }else if(drag.mode==="polyclick"){
+    // 大きく動いたらパンに切替（クリックではなくドラッグ）
+    if(Math.hypot(sx-drag.sx, sy-drag.sy)>5){
+      drag={mode:"pan", sx:drag.sx, sy:drag.sy, vx:state.view.x, vy:state.view.y};
+      canvas.classList.add("panning");
+    }
+  }else if(drag.mode==="rotate"){
+    const a1=Math.atan2(sy-drag.cy, sx-drag.cx);
+    let deg = drag.rot0 + (a1-drag.a0)*180/Math.PI;
+    if(e.shiftKey) deg = Math.round(deg/15)*15; // Shiftで15°スナップ
+    deg = ((deg+180)%360+360)%360 - 180;        // -180..180 に正規化
+    state.ov.rot = round1(deg); syncControls(); draw();
+  }else if(drag.mode==="move"){
+    const dx=(sx-drag.sx)/state.view.zoom, dy=(sy-drag.sy)/state.view.zoom;
+    state.ov.x=drag.ox+dx; state.ov.y=drag.oy+dy; syncControls(); draw();
+  }else{
+    state.view.x=drag.vx+(sx-drag.sx); state.view.y=drag.vy+(sy-drag.sy); draw();
+  }
+});
+window.addEventListener("mouseup", e=>{
+  if(drag && drag.mode==="crop"){
+    const ok = cropRect && cropRect.w*state.view.zoom>3 && cropRect.h*state.view.zoom>3;
+    setCropButtons(ok);
+    if(!ok) cropRect=null;
+    draw();
+  }else if(drag && drag.mode==="polyclick"){
+    const rect=canvas.getBoundingClientRect();
+    addPolyPoint(e.clientX-rect.left, e.clientY-rect.top);
+  }else if(drag && drag.mode==="move"){
+    pushHistory();
+  }else if(drag && drag.mode==="rotate"){
+    pushHistory();
+  }
+  drag=null; canvas.classList.remove("dragging","panning");
+});
+canvas.addEventListener("contextmenu", e=>e.preventDefault());
+canvas.addEventListener("wheel", e=>{
+  e.preventDefault();
+  const rect=canvas.getBoundingClientRect();
+  const f = e.deltaY<0 ? 1.12 : 1/1.12;
+  setZoom(state.view.zoom*f, e.clientX-rect.left, e.clientY-rect.top);
+}, {passive:false});
+
+// ---- キーボード ----
+window.addEventListener("keydown", e=>{
+  if(e.code==="Space"){ spaceDown=true; canvas.style.cursor="move"; }
+  // Undo / Redo
+  if((e.ctrlKey||e.metaKey) && !e.altKey){
+    const k=e.key.toLowerCase();
+    if(k==="z" && !e.shiftKey){ e.preventDefault(); undo(); return; }
+    if(k==="y" || (k==="z" && e.shiftKey)){ e.preventDefault(); redo(); return; }
+  }
+  if(!state.overlay) return;
+  // 数値入力などにフォーカス中はキー移動しない
+  const ae=document.activeElement, tag=ae&&ae.tagName;
+  if(tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA") return;
+  const step = e.altKey?0.1 : e.shiftKey?10 : 1;
+  const rstep = e.shiftKey?1 : 0.1;
+  let used=true;
+  switch(e.key){
+    case "ArrowLeft": state.ov.x-=step; break;
+    case "ArrowRight": state.ov.x+=step; break;
+    case "ArrowUp": state.ov.y-=step; break;
+    case "ArrowDown": state.ov.y+=step; break;
+    case "[": state.ov.rot=clamp(round1(state.ov.rot-rstep),-180,180); break;
+    case "]": state.ov.rot=clamp(round1(state.ov.rot+rstep),-180,180); break;
+    default: used=false;
+  }
+  if(used){ e.preventDefault(); nudged=true; syncControls(); draw(); }
+});
+let nudged=false;
+window.addEventListener("keyup", e=>{
+  if(e.code==="Space"){ spaceDown=false; canvas.style.cursor=""; }
+  if(nudged && ["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","[","]"].includes(e.key)){
+    nudged=false; pushHistory();
+  }
+});
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const round1=v=>Math.round(v*10)/10;
+const round2=v=>Math.round(v*100)/100;
+
+// ---- コントロール同期 ----
+function syncControls(){
+  $("opacity").value = Math.round(state.ov.opacity*100);
+  $("opVal").textContent = Math.round(state.ov.opacity*100)+"%";
+  $("rot").value = clamp(Math.round(state.ov.rot),-180,180);
+  $("rotVal").textContent = round1(state.ov.rot)+"°";
+  if(document.activeElement!==$("rotNum")) $("rotNum").value = round1(state.ov.rot);
+  if(document.activeElement!==$("posX")) $("posX").value = round2(state.ov.x);
+  if(document.activeElement!==$("posY")) $("posY").value = round2(state.ov.y);
+  $("showOverlay").checked = state.ov.show;
+}
+// スライダー（粗調整）
+$("opacity").addEventListener("input", e=>{ state.ov.opacity=e.target.value/100; $("opVal").textContent=e.target.value+"%"; draw(); });
+$("opacity").addEventListener("change", pushHistory);
+$("rot").addEventListener("input", e=>{ state.ov.rot=+e.target.value; syncControls(); draw(); });
+$("rot").addEventListener("change", pushHistory);
+$("showOverlay").addEventListener("change", e=>{ state.ov.show=e.target.checked; draw(); pushHistory(); });
+// 数値入力（精密）
+function bindNum(id, apply){
+  const el=$(id);
+  el.addEventListener("input", ()=>{ const v=parseFloat(el.value); if(!isNaN(v)){ apply(v); draw(); } });
+  el.addEventListener("change", ()=>{ syncControls(); pushHistory(); });
+  el.addEventListener("blur", ()=>{ syncControls(); });
+}
+bindNum("rotNum",   v=> state.ov.rot   = clamp(v,-180,180) );
+bindNum("posX",     v=> state.ov.x = v );
+bindNum("posY",     v=> state.ov.y = v );
+// ステッパー（±ボタン）
+document.querySelectorAll(".stepper button").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    const d=btn.dataset;
+    if(d.stepRot!==undefined) state.ov.rot = clamp(round1(state.ov.rot + +d.stepRot),-180,180);
+    else if(d.stepX!==undefined) state.ov.x = round2(state.ov.x + +d.stepX);
+    else if(d.stepY!==undefined) state.ov.y = round2(state.ov.y + +d.stepY);
+    syncControls(); draw(); pushHistory();
+  });
+});
+$("resetOverlay").addEventListener("click", ()=>{
+  state.ov.x = state.base? state.base.w*0.35:0; state.ov.y=0;
+  state.ov.scale=1; state.ov.rot=0; state.ov.flipH=1; state.ov.flipV=1;
+  syncControls(); draw(); pushHistory();
+});
+
+// ---- トリミング操作 ----
+const RECT_HINT="消したい／残したい範囲をマップ上でドラッグして囲み、下のボタンを押します。";
+const POLY_HINT="マップ上をクリックして頂点を追加。最初の点をもう一度クリックするか「図形を確定」で閉じます。";
+function setCropButtons(on){ $("cropKeep").disabled=!on; $("cropCut").disabled=!on; }
+function clearCropShapes(){ cropRect=null; cropPoints=[]; cropClosed=false; hoverWorld=null; setCropButtons(false); }
+function enterCropMode(){
+  if(!state.overlay){ toast("先に重ねるマップを読み込んでください"); return; }
+  cropMode=true; clearCropShapes();
+  $("cropActions").style.display="block";
+  $("cropToggle").textContent="トリミングを終了";
+  $("cropToggle").classList.add("primary");
+  $("cropHint").textContent = cropShape==="poly"?POLY_HINT:RECT_HINT;
+  $("polyOps").style.display = cropShape==="poly"?"block":"none";
+  draw();
+}
+function exitCropMode(){
+  cropMode=false; clearCropShapes();
+  $("cropActions").style.display="none";
+  $("cropToggle").textContent="トリミングを開始";
+  $("cropToggle").classList.remove("primary");
+  $("cropHint").textContent="ボタンを押したあと、消したい／残したい範囲を作って囲みます。";
+  draw();
+}
+$("cropToggle").addEventListener("click", ()=> cropMode ? exitCropMode() : enterCropMode());
+
+// マウスのドラッグ操作モード（移動 / 回転）
+document.querySelectorAll("#mouseModeSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    mouseMode=b.dataset.mm;
+    document.querySelectorAll("#mouseModeSeg button").forEach(x=>x.classList.toggle("on", x===b));
+  });
+});
+
+// 形状の切り替え
+document.querySelectorAll("#cropShapeSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{
+    cropShape=b.dataset.shape;
+    document.querySelectorAll("#cropShapeSeg button").forEach(x=>x.classList.toggle("on", x===b));
+    clearCropShapes();
+    $("polyOps").style.display = cropShape==="poly"?"block":"none";
+    $("cropHint").textContent = cropShape==="poly"?POLY_HINT:RECT_HINT;
+    draw();
+  });
+});
+
+// 多角形の頂点操作
+function addPolyPoint(sx, sy){
+  if(cropClosed) return;
+  // 3点以上あって、最初の点の近くをクリックしたら閉じる
+  if(cropPoints.length>=3){
+    const f=worldToScreen(cropPoints[0].x, cropPoints[0].y);
+    if(Math.hypot(sx-f.x, sy-f.y)<12){ closePoly(); return; }
+  }
+  cropPoints.push(screenToWorld(sx,sy));
+  draw();
+}
+function closePoly(){
+  if(cropPoints.length>=3){ cropClosed=true; hoverWorld=null; setCropButtons(true); draw(); }
+  else toast("頂点を3つ以上打ってください");
+}
+$("polyUndo").addEventListener("click", ()=>{
+  if(cropClosed){ cropClosed=false; setCropButtons(false); }
+  else cropPoints.pop();
+  draw();
+});
+$("polyClose").addEventListener("click", closePoly);
+
+// 画像をキャンバスに描画し、ローカル座標の多角形でマスクした新しいcanvasを返す
+function maskToCanvas(img, w, h, localPts, keepInside){
+  const cv=document.createElement("canvas");
+  cv.width=w; cv.height=h;
+  const c=cv.getContext("2d");
+  c.drawImage(img, 0, 0, w, h);
+  c.beginPath();
+  localPts.forEach((p,i)=> i? c.lineTo(p.x,p.y) : c.moveTo(p.x,p.y));
+  c.closePath();
+  c.globalCompositeOperation = keepInside ? "destination-in" : "destination-out";
+  c.fillStyle="#000"; c.fill();
+  return cv;
+}
+// 適用（矩形・多角形 共通）。主（キャンバス編集対象）のトリミングと同じ範囲を副にも適用する。
+function applyMask(keepInside){
+  let worldPts=null;
+  if(cropShape==="rect" && cropRect){
+    worldPts=[
+      [cropRect.x, cropRect.y],
+      [cropRect.x+cropRect.w, cropRect.y],
+      [cropRect.x+cropRect.w, cropRect.y+cropRect.h],
+      [cropRect.x, cropRect.y+cropRect.h],
+    ].map(([x,y])=>({x,y}));
+  }else if(cropShape==="poly" && cropClosed && cropPoints.length>=3){
+    worldPts=cropPoints;
+  }
+  if(!worldPts) return;
+  const o=state.overlay;
+  const localMap=worldPts.map(p=>worldToOverlayLocal(p.x,p.y)); // 回転を反映、o.w×o.h基準の座標
+  o.img = maskToCanvas(o.img, o.w, o.h, localMap, keepInside);
+
+  // 副にも同じ範囲を正規化して適用（サイズが異なっていても比率で合わせる）
+  if(state.overlaySecondary){
+    const s = state.overlaySecondary;
+    const localStatic = localMap.map(p=>({ x: p.x/o.w*s.w, y: p.y/o.h*s.h }));
+    s.img = maskToCanvas(s.img, s.w, s.h, localStatic, keepInside);
+  }
+  updateMapSummary();
+
+  clearCropShapes();
+  toast(keepInside?"範囲外を切り取りました":"範囲を消しました");
+  draw();
+  pushHistory();
+}
+$("cropKeep").addEventListener("click", ()=> applyMask(true));
+$("cropCut").addEventListener("click", ()=> applyMask(false));
+$("cropReset").addEventListener("click", ()=>{
+  if(!state.overlay) return;
+  state.overlay.img=state.overlay.orig;
+  if(state.overlaySecondary && state.overlaySecondary.orig){
+    state.overlaySecondary.img = state.overlaySecondary.orig;
+  }
+  updateMapSummary();
+  clearCropShapes();
+  toast("トリミングを取り消しました"); draw();
+  pushHistory();
+});
+
+// ---- 操作履歴（Undo / Redo） ----
+let history=[], histIndex=-1;
+function snapshot(){
+  const ov=state.ov, o=state.overlay, s=state.overlaySecondary;
+  return { x:ov.x, y:ov.y, rot:ov.rot, opacity:ov.opacity, show:ov.show,
+           scale:ov.scale, flipH:ov.flipH, flipV:ov.flipV,
+           img:o?o.img:null, staticImg:s?s.img:null };
+}
+function sameSnap(a,b){
+  return a&&b&&a.x===b.x&&a.y===b.y&&a.rot===b.rot&&a.opacity===b.opacity&&
+         a.show===b.show&&a.scale===b.scale&&a.flipH===b.flipH&&a.flipV===b.flipV&&
+         a.img===b.img&&a.staticImg===b.staticImg;
+}
+function applySnapshot(s){
+  Object.assign(state.ov, {x:s.x,y:s.y,rot:s.rot,opacity:s.opacity,show:s.show,scale:s.scale,flipH:s.flipH,flipV:s.flipV});
+  let imgChanged = false;
+  if(state.overlay && s.img && state.overlay.img!==s.img){ state.overlay.img=s.img; imgChanged=true; }
+  if(state.overlaySecondary && s.staticImg && state.overlaySecondary.img!==s.staticImg){ state.overlaySecondary.img=s.staticImg; imgChanged=true; }
+  if(imgChanged) updateMapSummary();
+  syncControls(); draw();
+}
+function initHistory(){ history=[snapshot()]; histIndex=0; updateHistButtons(); }
+function pushHistory(){
+  if(!state.overlay) return;
+  const s=snapshot();
+  if(sameSnap(history[histIndex], s)) return;
+  history=history.slice(0, histIndex+1);
+  history.push(s); histIndex=history.length-1;
+  updateHistButtons();
+}
+function undo(){ if(histIndex>0){ histIndex--; applySnapshot(history[histIndex]); updateHistButtons(); } }
+function redo(){ if(histIndex<history.length-1){ histIndex++; applySnapshot(history[histIndex]); updateHistButtons(); } }
+function updateHistButtons(){
+  $("undoBtn").disabled = histIndex<=0;
+  $("redoBtn").disabled = histIndex>=history.length-1;
+}
+$("undoBtn").addEventListener("click", undo);
+$("redoBtn").addEventListener("click", redo);
+
+
+// ---- ズームバー ----
+$("zoomIn").addEventListener("click", ()=>setZoom(state.view.zoom*1.25));
+$("zoomOut").addEventListener("click", ()=>setZoom(state.view.zoom/1.25));
+$("zoomFit").addEventListener("click", zoomFit);
+
+// ---- 書き出し ----
+function updateExportEnabled(){ $("exportBtn").disabled = !(state.base && state.overlay); }
+
+// baseRec/overlayRecを、キャンバス編集で使っている ov変形・バウンディングboxで合成した canvas を返す
+function compositeCanvas(baseRec, overlayRec, b, W, H){
+  const out = document.createElement("canvas");
+  out.width = W; out.height = H;
+  const octx = out.getContext("2d");
+  octx.imageSmoothingQuality = "high";
+  const ox = -b.x, oy = -b.y;
+  if(baseRec) octx.drawImage(baseRec.img, ox, oy, baseRec.w, baseRec.h);
+  if(overlayRec && state.ov.show){
+    octx.save();
+    octx.globalAlpha = state.ov.opacity;
+    octx.globalCompositeOperation = state.ov.blend;
+    const ov = state.ov;
+    const cx = overlayRec.w*ov.scale/2, cy = overlayRec.h*ov.scale/2;
+    octx.translate(ox+ov.x, oy+ov.y);
+    octx.translate(cx, cy);
+    octx.rotate(ov.rot*Math.PI/180);
+    octx.scale(ov.flipH, ov.flipV);
+    octx.translate(-cx, -cy);
+    octx.scale(ov.scale, ov.scale);
+    octx.drawImage(overlayRec.img, 0, 0, overlayRec.w, overlayRec.h);
+    octx.restore();
+  }
+  return out;
+}
+function canvasToBlob(cv){
+  return new Promise(resolve => cv.toBlob(resolve, "image/png"));
+}
+// 1枚を /api/merge に送ってベースのEXIFを入れ直してもらい、Blobで受け取る（保存APIへ渡す用）
+async function mergeToBlob(canvasEl, exifKind){
+  const blob = await canvasToBlob(canvasEl);
+  const fd = new FormData();
+  fd.append("merged", blob, exifKind==="static" ? "static_map.png" : "map.png");
+  fd.append("exif_kind", exifKind);
+  // map.png由来とstatic_map.png由来は別のクラウド地図から選ばれている可能性があるので、
+  // exifKindに対応するmap_id/元ファイルを使う。
+  const mapId = exifKind==="static" ? state.baseStaticMapId : state.baseMapId;
+  if(mapId){
+    fd.append("base_map_id", mapId);
+  }else{
+    const origFile = exifKind==="static" ? state.baseStaticFile : state.baseMapFile;
+    if(origFile) fd.append("base_original", origFile, origFile.name || "map.png");
+  }
+  const res = await fetch("/api/merge", { method:"POST", body: fd });
+  if(!res.ok){
+    const err = await res.json().catch(()=>null);
+    throw new Error((err && err.error) || `HTTP ${res.status}`);
+  }
+  return res.blob();
+}
+
+// ---- 保存ダイアログ（新規保存 / 上書き保存） ----
+let saveMode = "new";
+// 上書き保存の対象は「ベースの主（キャンバス編集対象）」のmap_id。
+// ローカルアップロードなどでmap_idが無いときは上書きできない。
+function overwriteTarget(){
+  const mapId = state.baseKind === "static" ? state.baseStaticMapId : state.baseMapId;
+  return mapId ? { mapId, name: state.baseName || "" } : null;
+}
+function setSaveMode(mode){
+  saveMode = mode;
+  document.querySelectorAll("#saveModeSeg button").forEach(b=> b.classList.toggle("on", b.dataset.mode===mode));
+  $("saveNameField").style.display = mode === "new" ? "block" : "none";
+  const target = overwriteTarget();
+  const targetEl = $("saveOverwriteTarget");
+  if(mode === "overwrite" && target){
+    targetEl.style.display = "block";
+    targetEl.textContent = `上書き対象: ${target.name || "(名称未設定)"}（ID: ${target.mapId}）`;
+  }else{
+    targetEl.style.display = "none";
+  }
+}
+document.querySelectorAll("#saveModeSeg button").forEach(b=>{
+  b.addEventListener("click", ()=>{ if(!b.disabled) setSaveMode(b.dataset.mode); });
+});
+function openSaveDialog(){
+  $("saveError").hidden = true;
+  $("saveDialogConfirm").disabled = false;
+  $("saveDialogConfirm").textContent = "保存する";
+  $("saveMapName").value = "";
+  const target = overwriteTarget();
+  const overwriteBtn = document.querySelector('#saveModeSeg [data-mode="overwrite"]');
+  overwriteBtn.disabled = !target;
+  overwriteBtn.title = target ? "" : "ベースマップがクラウドの地図から選ばれていないため上書きできません";
+  setSaveMode(target ? saveMode : "new");
+
+  const noteEl = $("saveSingleNote");
+  if(useSingleForBoth){
+    const have = kindFilename(state.baseKind);
+    const missing = kindFilename(state.baseKind === "static" ? "image" : "static");
+    noteEl.textContent = `${have} を ${missing} としても使用します`;
+    noteEl.style.display = "block";
+  }else{
+    noteEl.style.display = "none";
+  }
+
+  $("saveDialogBackdrop").hidden = false;
+  if(saveMode === "new") $("saveMapName").focus();
+}
+function closeSaveDialog(){ $("saveDialogBackdrop").hidden = true; }
+$("saveDialogCancel").addEventListener("click", closeSaveDialog);
+$("saveDialogBackdrop").addEventListener("click", e=>{ if(e.target===$("saveDialogBackdrop")) closeSaveDialog(); });
+
+// クラウド保存APIは file(map.png) と static_file(static_map.png) の両方を必須とする。
+// 片方しか編集していない場合は、選んだ方の画像を両方のフィールドに使ってよいか確認する。
+function hasBothKinds(){
+  return !!(state.baseSecondary && state.overlaySecondary);
+}
+let useSingleForBoth = false;
+$("exportBtn").addEventListener("click", ()=>{
+  if(!state.base || !state.overlay){ return; }
+  if(!hasBothKinds()){
+    const have = kindFilename(state.baseKind);
+    const missing = kindFilename(state.baseKind === "static" ? "image" : "static");
+    const ok = confirm(`${missing} が選択されていません。\n保存時は ${have} を ${missing} としても使いますか？`);
+    if(!ok) return;
+    useSingleForBoth = true;
+  }else{
+    useSingleForBoth = false;
+  }
+  openSaveDialog();
+});
+
+$("saveDialogConfirm").addEventListener("click", async ()=>{
+  const errEl = $("saveError");
+  errEl.hidden = true;
+
+  let name = null, mapId = null;
+  if(saveMode === "new"){
+    name = $("saveMapName").value.trim();
+    if(!name){ errEl.textContent = "マップ名を入力してください"; errEl.hidden = false; return; }
+  }else{
+    const target = overwriteTarget();
+    if(!target){ errEl.textContent = "上書き対象のマップが見つかりません"; errEl.hidden = false; return; }
+    mapId = target.mapId;
+  }
+
+  // 出力サイズはベースの大きさに固定する（編集中のズーム/表示上は重ねるマップの
+  // はみ出しも見えるが、保存時はベースの範囲外を切り捨てる）。
+  const W = Math.ceil(state.base.w), H = Math.ceil(state.base.h);
+  const b = { x: 0, y: 0, w: W, h: H };
+  if(W*H > 60_000_000 && !confirm("出力画像がとても大きいです。続けますか？")) return;
+
+  // 主（base/overlay）は static_map.png のことも map.png のこともある。実際の種類は
+  // state.baseKind で判定する。副は主と反対の種類。
+  const primaryKind = state.baseKind || "static";
+  const secondaryKind = primaryKind === "static" ? "image" : "static";
+  const primaryCanvas = compositeCanvas(state.base, state.overlay, b, W, H);
+  const hasSecondary = state.baseSecondary || state.overlaySecondary;
+  const secondaryCanvas = hasSecondary ? compositeCanvas(state.baseSecondary, state.overlaySecondary, b, W, H) : null;
+
+  $("saveDialogConfirm").disabled = true;
+  $("saveDialogConfirm").textContent = "保存中…";
+  try{
+    const primaryBlob = await mergeToBlob(primaryCanvas, primaryKind);
+    let secondaryBlob = secondaryCanvas ? await mergeToBlob(secondaryCanvas, secondaryKind) : null;
+    if(!secondaryBlob && useSingleForBoth){
+      // 片方しか編集していない場合、確認済みなら同じ画像をもう一方のフィールドにも使う
+      secondaryBlob = primaryBlob;
+    }
+    const imageBlob = primaryKind === "image" ? primaryBlob : secondaryBlob;
+    const staticBlob = primaryKind === "static" ? primaryBlob : secondaryBlob;
+
+    const fd = new FormData();
+    fd.append("mode", saveMode);
+    if(saveMode === "new") fd.append("name", name);
+    else fd.append("map_id", mapId);
+    if(imageBlob) fd.append("image", imageBlob, "map.png");
+    if(staticBlob) fd.append("static_image", staticBlob, "static_map.png");
+
+    const res = await fetch("/api/maps/save", { method:"POST", body: fd });
+    const data = await res.json().catch(()=>null);
+    if(!res.ok || !data || data.error){
+      throw new Error((data && data.error) || `HTTP ${res.status}`);
+    }
+
+    closeSaveDialog();
+    toast(saveMode === "new" ? "新規保存しました" : "上書き保存しました");
+  }catch(err){
+    errEl.textContent = "保存に失敗しました: " + err.message;
+    errEl.hidden = false;
+  }finally{
+    $("saveDialogConfirm").disabled = false;
+    $("saveDialogConfirm").textContent = "保存する";
+  }
+});
+
+// ---- トースト ----
+let toastT;
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+// ---- 初期化 ----
+window.addEventListener("resize", resize);
+updateExportEnabled();
+resize();
+</script>
+</body>
+</html>
