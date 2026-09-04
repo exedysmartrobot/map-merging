@@ -452,6 +452,88 @@ def get_backup_image(backup_id):
     return send_file(io.BytesIO(blob), mimetype="image/png", download_name=fname)
 
 
+def _save_backup_row(robot_id, map_id, map_name, static_blob, image_blob):
+    """バックアップを1件DBに保存して backup_id を返す（内部用）。
+    create_backup() と復元前の自動退避で共通利用する。"""
+    conn = _backup_db()
+    conn.execute(
+        "INSERT INTO backups (robot_id, map_id, map_name, static_blob, image_blob, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (robot_id, map_id, map_name, static_blob, image_blob,
+         datetime.now().isoformat(timespec="seconds")),
+    )
+    conn.commit()
+    new_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+    conn.close()
+    return new_id
+
+
+@app.post("/api/backup/<int:backup_id>/restore")
+def restore_backup(backup_id):
+    """指定バックアップをクラウドに上書きして巻き戻す（案A-1）。
+    巻き戻す前に、現在クラウドにある状態を新しいバックアップとして自動退避する。
+    """
+    # 1. 対象バックアップをDBから取り出す
+    try:
+        conn = _backup_db()
+        row = conn.execute(
+            "SELECT robot_id, map_id, map_name, static_blob, image_blob "
+            "FROM backups WHERE id = ?", (backup_id,)
+        ).fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"DB読み込みに失敗: {e}"}), 500
+    if not row:
+        return jsonify({"error": "バックアップが見つかりません"}), 404
+
+    robot_id, map_id, map_name, static_blob, image_blob = row
+    if static_blob is None and image_blob is None:
+        return jsonify({"error": "このバックアップには画像がありません"}), 400
+
+    # 2.【安全策】巻き戻す前に、現在クラウドにある状態を自動退避する
+    auto_backup_id = None
+    try:
+        m = _find_map(robot_id, map_id)
+        if m:
+            cur_static = _fetch_png_bytes(m["static_image"]) if m.get("static_image") else None
+            cur_image = _fetch_png_bytes(m["image"]) if m.get("image") else None
+            if cur_static is not None or cur_image is not None:
+                auto_backup_id = _save_backup_row(
+                    robot_id, map_id, m.get("name") or map_name,
+                    cur_static, cur_image,
+                )
+    except Exception as e:
+        # 自動退避に失敗しても、復元自体は続行する（ただし警告を残す）
+        print(f"[restore] 復元前の自動退避に失敗（続行）: {e}")
+
+    # 3. バックアップの画像をクラウドに上書き保存する
+    files = {}
+    if image_blob is not None:
+        files["file"] = ("map.png", image_blob, "image/png")
+    if static_blob is not None:
+        files["static_file"] = ("static_map.png", static_blob, "image/png")
+
+    try:
+        result = api_post(robot_id, f"maps/{map_id}", files)
+    except Exception as e:
+        return jsonify({"error": f"復元（上書き）に失敗: {e}"}), 502
+
+    if isinstance(result, (bytes, str)):
+        try:
+            result = json.loads(result)
+        except Exception:
+            pass
+    if isinstance(result, dict) and result.get("error"):
+        return jsonify({"error": f"復元（上書き）に失敗: {result['error']}"}), 502
+
+    return jsonify({
+        "ok": True,
+        "restored_backup_id": backup_id,
+        "map_id": map_id,
+        "auto_backup_id": auto_backup_id,  # 巻き戻し前の状態を退避したID（Noneなら退避なし）
+    })
+
+
 # if __name__ == "__main__":
 #     # ローカル開発用。0.0.0.0 にすると同一LANの別端末からも見える
 #     app.run(host="127.0.0.1", port=5000, debug=True)
