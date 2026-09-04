@@ -1287,9 +1287,7 @@
         <div class="save-dialog-backdrop" id="routeShiftDialogBackdrop" hidden>
             <div class="save-dialog warn-dialog">
                 <h3 class="warn-title"><span class="warn-icon">⚠️</span>登録済みの地点・ルートの位置がズレます</h3>
-                <p class="tip">
-                    この地図の基準（原点）は左上です。左または上にはみ出した部分も含めると、ベースの地図がずれて描かれるため、<b>これまで登録した地点・ルートの位置が実際の地図とズレてしまいます</b>。
-                </p>
+                <p class="tip">この地図の基準（原点）は左上です。左または上にはみ出した部分も含めると、ベースの地図がずれて描かれるため、<b>これまで登録した地点・ルートの位置が実際の地図とズレてしまいます</b>。</p>
 
                 <div class="overflow-choice-list">
                     <button class="overflow-choice-btn warn" id="routeShiftYesBtn" type="button">
@@ -1304,6 +1302,22 @@
 
                 <div class="save-dialog-actions">
                     <button class="btn" id="routeShiftCancelBtn" type="button">キャンセル</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="save-dialog-backdrop" id="backupDialogBackdrop" hidden>
+            <div class="save-dialog">
+                <h3>合成前の地図をバックアップしますか？</h3>
+                <p class="tip">上書き保存すると、クラウド上の現在の地図（static_map.png / map.png）は上書きされて元に戻せなくなります。上書きする前に、現在の状態をこのサーバーに退避しておくことができます（1週間保存）。</p>
+
+                <div class="save-target" id="backupDialogTarget">—</div>
+
+                <div class="save-error" id="backupDialogError" hidden></div>
+
+                <div class="save-dialog-actions">
+                    <button class="btn" id="backupDialogNo" type="button">いいえ、そのまま保存</button>
+                    <button class="btn primary" id="backupDialogYes" type="button">はい、バックアップする</button>
                 </div>
             </div>
         </div>
