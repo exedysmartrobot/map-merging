@@ -67,6 +67,9 @@ def list_maps():
 
     if not isinstance(result, dict):
         return jsonify({"error": "予期しない応答形式", "raw": str(result)[:500]}), 502
+    if "error" in result:
+        # api_getが失敗（認証エラー等）した場合、空の地図一覧として握りつぶさずエラーを返す
+        return jsonify({"error": f"地図一覧の取得に失敗: {result['error']}"}), 502
 
     maps = result.get("maps", [])
     # フロントで使いやすい形に絞って返す
