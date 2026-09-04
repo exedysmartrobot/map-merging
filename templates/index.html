@@ -2832,6 +2832,77 @@
                     backdrop.addEventListener("click", onBackdrop);
                 });
             }
+
+            // 上書き保存の前に「合成前の地図をバックアップするか」を確認するダイアログ。
+            // true = バックアップして続行 / false = バックアップせず続行 / null = 保存自体をキャンセル
+            function askBackup(target) {
+                return new Promise((resolve) => {
+                    const backdrop = $("backupDialogBackdrop");
+                    const errEl = $("backupDialogError");
+                    const targetEl = $("backupDialogTarget");
+                    const yesBtn = $("backupDialogYes");
+                    const noBtn = $("backupDialogNo");
+
+                    errEl.hidden = true;
+                    targetEl.innerHTML = "";
+                    const nameLine = document.createElement("div");
+                    nameLine.textContent = `対象: ${target.name || "(名称未設定)"}`;
+                    const idLine = document.createElement("div");
+                    idLine.className = "save-target-id";
+                    idLine.textContent = `ID: ${target.mapId}`;
+                    targetEl.appendChild(nameLine);
+                    targetEl.appendChild(idLine);
+
+                    yesBtn.disabled = false;
+                    noBtn.disabled = false;
+                    yesBtn.textContent = "はい、バックアップする";
+                    backdrop.hidden = false;
+
+                    const cleanup = (result) => {
+                        yesBtn.removeEventListener("click", onYes);
+                        noBtn.removeEventListener("click", onNo);
+                        backdrop.removeEventListener("click", onBackdrop);
+                        backdrop.hidden = true;
+                        resolve(result);
+                    };
+                    // 「はい」→ バックアップAPIを実行。成功したらtrue、失敗したら中止(ダイアログに留まる)
+                    const onYes = async () => {
+                        errEl.hidden = true;
+                        yesBtn.disabled = true;
+                        noBtn.disabled = true;
+                        yesBtn.textContent = "バックアップ中…";
+                        try {
+                            const fd = { map_id: target.mapId };
+                            if (robotId) fd.robot_id = robotId;
+                            const res = await fetch("/api/backup", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify(fd),
+                            });
+                            const data = await res.json().catch(() => null);
+                            if (!res.ok || !data || data.error) {
+                                throw new Error((data && data.error) || `HTTP ${res.status}`);
+                            }
+                            cleanup(true); // バックアップ成功 → 上書きへ進む
+                        } catch (err) {
+                            // 安全案：バックアップ失敗時は上書きに進ませない
+                            errEl.textContent = "バックアップに失敗しました: " + err.message + "（保存は中止できます）";
+                            errEl.hidden = false;
+                            yesBtn.disabled = false;
+                            noBtn.disabled = false;
+                            yesBtn.textContent = "再試行";
+                        }
+                    };
+                    const onNo = () => cleanup(false); // バックアップせず上書きへ進む
+                    const onBackdrop = (e) => {
+                        if (e.target === backdrop) cleanup(null); // 背景クリック=保存キャンセル
+                    };
+                    yesBtn.addEventListener("click", onYes);
+                    noBtn.addEventListener("click", onNo);
+                    backdrop.addEventListener("click", onBackdrop);
+                });
+            }
+
             $("exportBtn").addEventListener("click", async () => {
                 if (!state.base || !state.overlay) {
                     return;
@@ -2918,6 +2989,17 @@
                 const primaryCanvas = compositeCanvas(state.base, state.overlay, b, W, H);
                 const hasSecondary = state.baseSecondary || state.overlaySecondary;
                 const secondaryCanvas = hasSecondary ? compositeCanvas(state.baseSecondary, state.overlaySecondary, b, W, H) : null;
+
+                // 【追加】上書き保存のときは、先に「合成前の地図をバックアップするか」を確認する。
+                // 安全案: バックアップに失敗した場合は上書きを実行しない。
+                if (saveMode === "overwrite") {
+                    const backupChoice = await askBackup({ mapId: mapId, name: state.baseName || "" });
+                    if (backupChoice === null) {
+                        // 背景クリック等でキャンセル → 保存フロー自体を中止
+                        return;
+                    }
+                    // true(バックアップ済み) / false(スキップ) どちらも、この先の上書きに進む
+                }
 
                 $("saveDialogConfirm").disabled = true;
                 $("saveDialogConfirm").textContent = "保存中…";
