@@ -22,7 +22,7 @@ load_dotenv()
 # ロボットAPIの直接エンドポイント（swagger: servers: - url: https://exedy-robo.com）
 DIRECT_API_HOST = os.getenv("DIRECT_API_HOST", "https://exedy-robo.com")
 # 認証ヘッダー。.envで API_KEY を指定すればそちらを優先し、未指定ならこの値を使う。
-API_KEY = os.getenv("API_KEY", "sumagi1007")
+API_KEY = os.getenv("API_KEY")
 DIRECT_HEADERS = {"API-key": API_KEY}
 
 DEFAULT_TIMEOUT = 10

@@ -968,6 +968,63 @@
                 width: auto;
                 padding: 9px 18px;
             }
+            /* ---- はみ出し確認ダイアログ ---- */
+            .overflow-choice-list {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            .overflow-choice-btn {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 3px;
+                width: 100%;
+                text-align: left;
+                padding: 12px 14px;
+                border-radius: 9px;
+                border: 1px solid var(--line);
+                background: var(--panel-2);
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .overflow-choice-btn:hover {
+                border-color: var(--accent);
+            }
+            .overflow-choice-title {
+                font-size: 13px;
+                font-weight: 600;
+                color: var(--text);
+            }
+            .overflow-choice-desc {
+                font-size: 12px;
+                color: var(--muted);
+            }
+            /* ---- 注意（ズレ警告）ダイアログ ---- */
+            .warn-dialog {
+                border-color: #e0a33c;
+                box-shadow: 0 8px 28px rgba(192, 57, 43, 0.22);
+            }
+            .warn-title {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                color: #c0392b;
+            }
+            .warn-icon {
+                font-size: 17px;
+                line-height: 1;
+            }
+            .overflow-choice-btn.warn {
+                border-color: #e0a33c;
+                background: rgba(224, 163, 60, 0.1);
+            }
+            .overflow-choice-btn.warn:hover {
+                border-color: #c0392b;
+            }
+            .overflow-choice-btn.warn .overflow-choice-title {
+                color: #c0392b;
+            }
         </style>
     </head>
     <body>
@@ -1143,7 +1200,7 @@
                     <button class="btn primary" id="exportBtn">合成して保存</button>
                     <div class="tip">
                         static_map.png / map.png
-                        を同じ位置・回転・トリミングで合成し、保存します（新規保存／上書き保存を選べます）。編集はどちらか一方でもできますが、<b>クラウド保存には両方が必要</b>です。出力サイズはベースの大きさに固定され、レイヤーマップがはみ出た部分は切り捨てられます。
+                        を同じ位置・回転・トリミングで合成し、保存します（新規保存／上書き保存を選べます）。編集はどちらか一方でもできますが、<b>クラウド保存には両方が必要</b>です。レイヤーマップがベースからはみ出ている場合は、削除してベースの大きさで保存するか、削除せずレイヤーを含めた大きさで保存するかを確認します。
                     </div>
                 </div>
 
@@ -1201,6 +1258,52 @@
                 <div class="save-dialog-actions">
                     <button class="btn" id="saveDialogCancel" type="button">キャンセル</button>
                     <button class="btn primary" id="saveDialogConfirm" type="button">保存する</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="save-dialog-backdrop" id="overflowDialogBackdrop" hidden>
+            <div class="save-dialog">
+                <h3>重ねた地図がはみ出しています</h3>
+                <p class="tip">重ねた地図（レイヤー）の一部が、ベースの地図の範囲からはみ出しています。保存方法を選んでください。</p>
+
+                <div class="overflow-choice-list">
+                    <button class="overflow-choice-btn" id="overflowCropBtn" type="button">
+                        <span class="overflow-choice-title">はみ出た部分を削除して保存</span>
+                        <span class="overflow-choice-desc">ベースの地図と同じ大きさの画像になります</span>
+                    </button>
+                    <button class="overflow-choice-btn" id="overflowKeepBtn" type="button">
+                        <span class="overflow-choice-title">削除せずそのまま保存</span>
+                        <span class="overflow-choice-desc">はみ出た分だけ大きい画像になります</span>
+                    </button>
+                </div>
+
+                <div class="save-dialog-actions">
+                    <button class="btn" id="overflowDialogCancel" type="button">キャンセル（保存しない）</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="save-dialog-backdrop" id="routeShiftDialogBackdrop" hidden>
+            <div class="save-dialog warn-dialog">
+                <h3 class="warn-title"><span class="warn-icon">⚠️</span>登録済みの地点・ルートの位置がズレます</h3>
+                <p class="tip">
+                    この地図の基準（原点）は左上です。左または上にはみ出した部分も含めると、ベースの地図がずれて描かれるため、<b>これまで登録した地点・ルートの位置が実際の地図とズレてしまいます</b>。
+                </p>
+
+                <div class="overflow-choice-list">
+                    <button class="overflow-choice-btn warn" id="routeShiftYesBtn" type="button">
+                        <span class="overflow-choice-title">ずれてもいいので含めて保存</span>
+                        <span class="overflow-choice-desc">左/上のはみ出しも含めた大きさで保存します</span>
+                    </button>
+                    <button class="overflow-choice-btn" id="routeShiftNoBtn" type="button">
+                        <span class="overflow-choice-title">左/上は削除する</span>
+                        <span class="overflow-choice-desc">右/下のはみ出しだけ含めて保存します（ズレません）</span>
+                    </button>
+                </div>
+
+                <div class="save-dialog-actions">
+                    <button class="btn" id="routeShiftCancelBtn" type="button">キャンセル</button>
                 </div>
             </div>
         </div>
@@ -2131,16 +2234,6 @@
                 canvas.classList.remove("dragging", "panning");
             });
             canvas.addEventListener("contextmenu", (e) => e.preventDefault());
-            canvas.addEventListener(
-                "wheel",
-                (e) => {
-                    e.preventDefault();
-                    const rect = canvas.getBoundingClientRect();
-                    const f = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-                    setZoom(state.view.zoom * f, e.clientX - rect.left, e.clientY - rect.top);
-                },
-                { passive: false },
-            );
 
             // ---- キーボード ----
             window.addEventListener("keydown", (e) => {
@@ -2531,6 +2624,11 @@
                 out.height = H;
                 const octx = out.getContext("2d");
                 octx.imageSmoothingQuality = "high";
+                // 何も描かれない部分（はみ出しを含めた拡張分など）が透明のままだと、
+                // アルファを無視して読まれた場合に黒(=障害物)と誤認識されうるため、
+                // ROSのmap_server等で「未知領域」を表す色(205,205,205)で先に塗りつぶしておく。
+                octx.fillStyle = "rgb(205,205,205)";
+                octx.fillRect(0, 0, W, H);
                 const ox = -b.x,
                     oy = -b.y;
                 if (baseRec) octx.drawImage(baseRec.img, ox, oy, baseRec.w, baseRec.h);
@@ -2651,7 +2749,76 @@
                 return !!(state.baseSecondary && state.overlaySecondary);
             }
             let useSingleForBoth = false;
-            $("exportBtn").addEventListener("click", () => {
+            // 書き出しサイズの決め方
+            //   "crop"        : ベースの大きさに固定し、はみ出しは全方向削除（従来の挙動）
+            //   "expandSafe"  : 右/下のはみ出しだけ含めて拡大（原点はベース左上のまま＝ルートはずれない）
+            //   "expandAll"   : 左/上のはみ出しも含めて拡大（ベースの原点がずれる＝既存ルートもずれる）
+            let saveExpandMode = "crop";
+            // レイヤー(重ねた地図)がベースの範囲からどれだけはみ出しているかを辺ごとに返す
+            function overflowInfo() {
+                if (!state.base || !state.overlay) return { left: 0, top: 0, right: 0, bottom: 0 };
+                const bw = boundingWorld();
+                const eps = 0.5; // 丸め誤差の許容
+                const raw = { left: -bw.minX, top: -bw.minY, right: bw.maxX - state.base.w, bottom: bw.maxY - state.base.h };
+                return {
+                    left: raw.left > eps ? raw.left : 0,
+                    top: raw.top > eps ? raw.top : 0,
+                    right: raw.right > eps ? raw.right : 0,
+                    bottom: raw.bottom > eps ? raw.bottom : 0,
+                };
+            }
+            // はみ出し確認ダイアログ（削除する／削除せず保存）。true=削除 / false=削除せず / null=キャンセル
+            function askOverlayOverflow() {
+                return new Promise((resolve) => {
+                    const backdrop = $("overflowDialogBackdrop");
+                    backdrop.hidden = false;
+                    const cleanup = (result) => {
+                        backdrop.hidden = true;
+                        $("overflowCropBtn").removeEventListener("click", onCrop);
+                        $("overflowKeepBtn").removeEventListener("click", onKeep);
+                        $("overflowDialogCancel").removeEventListener("click", onCancel);
+                        backdrop.removeEventListener("click", onBackdrop);
+                        resolve(result);
+                    };
+                    const onCrop = () => cleanup(true);
+                    const onKeep = () => cleanup(false);
+                    const onCancel = () => cleanup(null);
+                    const onBackdrop = (e) => {
+                        if (e.target === backdrop) cleanup(null);
+                    };
+                    $("overflowCropBtn").addEventListener("click", onCrop);
+                    $("overflowKeepBtn").addEventListener("click", onKeep);
+                    $("overflowDialogCancel").addEventListener("click", onCancel);
+                    backdrop.addEventListener("click", onBackdrop);
+                });
+            }
+            // 「削除せず保存」を選び、かつ左/上にはみ出しがある場合だけ出す追加確認。
+            // true=ずれてもいいので左/上も含める / false=左/上は削除し右/下だけ含める / null=キャンセル
+            function askRouteShift() {
+                return new Promise((resolve) => {
+                    const backdrop = $("routeShiftDialogBackdrop");
+                    backdrop.hidden = false;
+                    const cleanup = (result) => {
+                        backdrop.hidden = true;
+                        $("routeShiftYesBtn").removeEventListener("click", onYes);
+                        $("routeShiftNoBtn").removeEventListener("click", onNo);
+                        $("routeShiftCancelBtn").removeEventListener("click", onCancel);
+                        backdrop.removeEventListener("click", onBackdrop);
+                        resolve(result);
+                    };
+                    const onYes = () => cleanup(true);
+                    const onNo = () => cleanup(false);
+                    const onCancel = () => cleanup(null);
+                    const onBackdrop = (e) => {
+                        if (e.target === backdrop) cleanup(null);
+                    };
+                    $("routeShiftYesBtn").addEventListener("click", onYes);
+                    $("routeShiftNoBtn").addEventListener("click", onNo);
+                    $("routeShiftCancelBtn").addEventListener("click", onCancel);
+                    backdrop.addEventListener("click", onBackdrop);
+                });
+            }
+            $("exportBtn").addEventListener("click", async () => {
                 if (!state.base || !state.overlay) {
                     return;
                 }
@@ -2663,6 +2830,24 @@
                     useSingleForBoth = true;
                 } else {
                     useSingleForBoth = false;
+                }
+                const ov = overflowInfo();
+                const hasAnyOverflow = ov.left > 0 || ov.top > 0 || ov.right > 0 || ov.bottom > 0;
+                const hasLeftTop = ov.left > 0 || ov.top > 0;
+                if (hasAnyOverflow) {
+                    const choice = await askOverlayOverflow();
+                    if (choice === null) return; // キャンセル：保存フローを中断
+                    if (choice === true) {
+                        saveExpandMode = "crop";
+                    } else if (hasLeftTop) {
+                        const shiftOk = await askRouteShift();
+                        if (shiftOk === null) return; // キャンセル：保存フローを中断
+                        saveExpandMode = shiftOk ? "expandAll" : "expandSafe";
+                    } else {
+                        saveExpandMode = "expandSafe";
+                    }
+                } else {
+                    saveExpandMode = "crop";
                 }
                 openSaveDialog();
             });
@@ -2690,11 +2875,26 @@
                     mapId = target.mapId;
                 }
 
-                // 出力サイズはベースの大きさに固定する（編集中のズーム/表示上はレイヤーマップの
-                // はみ出しも見えるが、保存時はベースの範囲外を切り捨てる）。
-                const W = Math.ceil(state.base.w),
+                // 出力サイズ・原点は saveExpandMode に応じて決める。
+                //   crop       : ベースの大きさのみ（原点はベース左上のまま）
+                //   expandSafe : 右/下のはみ出しだけ含めて拡大（原点はベース左上のまま＝ルートはずれない）
+                //   expandAll  : 左/上のはみ出しも含めて拡大（原点がずれる＝ルートもずれる、ユーザー確認済み）
+                let W, H, b;
+                if (saveExpandMode === "expandAll") {
+                    const bw = boundingWorld();
+                    W = Math.ceil(bw.w);
+                    H = Math.ceil(bw.h);
+                    b = { x: bw.minX, y: bw.minY, w: W, h: H };
+                } else if (saveExpandMode === "expandSafe") {
+                    const bw = boundingWorld();
+                    W = Math.ceil(Math.max(state.base.w, bw.maxX));
+                    H = Math.ceil(Math.max(state.base.h, bw.maxY));
+                    b = { x: 0, y: 0, w: W, h: H };
+                } else {
+                    W = Math.ceil(state.base.w);
                     H = Math.ceil(state.base.h);
-                const b = { x: 0, y: 0, w: W, h: H };
+                    b = { x: 0, y: 0, w: W, h: H };
+                }
                 if (W * H > 60_000_000 && !confirm("出力画像がとても大きいです。続けますか？")) return;
 
                 // 主（base/overlay）は static_map.png のことも map.png のこともある。実際の種類は
