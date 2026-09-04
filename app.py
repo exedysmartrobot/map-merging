@@ -13,6 +13,8 @@
   - pip install flask pillow requests python-dotenv
 """
 
+from datetime import datetime
+import sqlite3
 from app_client import api_get, api_post
 import io
 import os
@@ -286,6 +288,102 @@ def save_map():
         return jsonify({"error": result["error"]}), 502
 
     return jsonify({"ok": True, "result": result})
+
+
+# ==================================================================
+# 上書き保存バックアップ機能（合成前の地図をDBに退避）
+# ------------------------------------------------------------------
+#   上書き保存でクラウドのデータが消える前に、その map_id が今持っている
+#   static_map.png / map.png をDB(SQLite)に丸ごと退避しておく。
+#   画像バイナリもDB内(BLOB)に保存する。1週間で自動削除する想定。
+# ==================================================================
+
+BACKUP_DB = os.path.join(BASE_DIR, "backups.db")
+
+
+def _backup_db():
+    """DB接続を返す（なければテーブルを作る）"""
+    conn = sqlite3.connect(BACKUP_DB)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS backups (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            robot_id    TEXT,
+            map_id      TEXT,
+            map_name    TEXT,
+            static_blob BLOB,
+            image_blob  BLOB,
+            created_at  TEXT
+        )
+    """)
+    return conn
+
+
+@app.post("/api/backup")
+def create_backup():
+    """指定 map_id が今クラウドに持っている画像をDBに退避する。
+    JSON body: { "map_id": "...", "robot_id": "..."(任意) }
+    """
+    data = request.get_json(silent=True) or {}
+    map_id = str(data.get("map_id", "")).strip()
+    robot_id = str(data.get("robot_id") or ROBOT_ID).strip()
+    if not map_id:
+        return jsonify({"error": "map_id がありません"}), 400
+
+    # 上書き対象の地図を一覧から引く（画像URLを得る）
+    try:
+        m = _find_map(robot_id, map_id)
+    except Exception as e:
+        return jsonify({"error": f"地図情報の取得に失敗: {e}"}), 502
+    if not m:
+        return jsonify({"error": "map_id が見つかりません"}), 404
+
+    map_name = m.get("name") or ""
+
+    # static_map.png / map.png のうち、存在するものだけ取得する（案1）
+    static_blob = None
+    image_blob = None
+    errors = []
+    if m.get("static_image"):
+        try:
+            static_blob = _fetch_png_bytes(m.get("static_image"))
+        except Exception as e:
+            errors.append(f"static_map.png取得失敗: {e}")
+    if m.get("image"):
+        try:
+            image_blob = _fetch_png_bytes(m.get("image"))
+        except Exception as e:
+            errors.append(f"map.png取得失敗: {e}")
+
+    # どちらも取れなければ失敗扱い
+    if static_blob is None and image_blob is None:
+        return jsonify({"error": "退避できる画像がありませんでした", "detail": errors}), 502
+
+    # DBに保存
+    try:
+        conn = _backup_db()
+        conn.execute(
+            "INSERT INTO backups (robot_id, map_id, map_name, static_blob, image_blob, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (robot_id, map_id, map_name, static_blob, image_blob,
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        conn.commit()
+        backup_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"DB保存に失敗: {e}"}), 500
+
+    return jsonify({
+        "ok": True,
+        "backup_id": backup_id,
+        "map_id": map_id,
+        "map_name": map_name,
+        "saved": {
+            "static_map": static_blob is not None,
+            "map": image_blob is not None,
+        },
+        "warnings": errors,  # 片方だけ取れなかった等
+    })
 
 
 # if __name__ == "__main__":
