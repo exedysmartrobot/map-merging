@@ -386,6 +386,72 @@ def create_backup():
     })
 
 
+@app.get("/api/backup")
+def list_backups():
+    """指定 map_id のバックアップ世代一覧を返す（新しい順）。
+    クエリ: ?map_id=xxx&robot_id=yyy(任意)
+    画像バイナリは重いので含めず、有無だけ返す。
+    """
+    map_id = str(request.args.get("map_id", "")).strip()
+    robot_id = str(request.args.get("robot_id") or ROBOT_ID).strip()
+    if not map_id:
+        return jsonify({"error": "map_id がありません"}), 400
+
+    try:
+        conn = _backup_db()
+        rows = conn.execute(
+            "SELECT id, robot_id, map_id, map_name, "
+            "  (static_blob IS NOT NULL) AS has_static, "
+            "  (image_blob IS NOT NULL) AS has_image, "
+            "  created_at "
+            "FROM backups "
+            "WHERE map_id = ? AND robot_id = ? "
+            "ORDER BY id DESC",
+            (map_id, robot_id),
+        ).fetchall()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"DB読み込みに失敗: {e}"}), 500
+
+    backups = [{
+        "backup_id": r[0],
+        "robot_id": r[1],
+        "map_id": r[2],
+        "map_name": r[3],
+        "has_static": bool(r[4]),
+        "has_image": bool(r[5]),
+        "created_at": r[6],
+    } for r in rows]
+    return jsonify({"map_id": map_id, "robot_id": robot_id, "backups": backups})
+
+
+@app.get("/api/backup/<int:backup_id>/image")
+def get_backup_image(backup_id):
+    """指定バックアップの画像を返す。
+    クエリ: ?kind=static(既定) or image
+    """
+    kind = request.args.get("kind", "static")  # "static" or "image"
+    col = "static_blob" if kind == "static" else "image_blob"
+
+    try:
+        conn = _backup_db()
+        row = conn.execute(
+            f"SELECT {col}, map_id FROM backups WHERE id = ?", (backup_id,)
+        ).fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({"error": f"DB読み込みに失敗: {e}"}), 500
+
+    if not row:
+        return jsonify({"error": "バックアップが見つかりません"}), 404
+    blob, map_id = row[0], row[1]
+    if blob is None:
+        return jsonify({"error": f"{kind} 画像がこのバックアップにはありません"}), 404
+
+    fname = f"{map_id}_{kind}.png"
+    return send_file(io.BytesIO(blob), mimetype="image/png", download_name=fname)
+
+
 # if __name__ == "__main__":
 #     # ローカル開発用。0.0.0.0 にすると同一LANの別端末からも見える
 #     app.run(host="127.0.0.1", port=5000, debug=True)
